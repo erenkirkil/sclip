@@ -31,9 +31,22 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+
+  # Clipboard (text/image/files, platform-rich)
+  super_clipboard: ^0.8.24
+
+  # System tray icon + menu
+  tray_manager: ^0.2.4
+
+  # Global hotkeys (Cmd/Ctrl+Shift+V)
+  hotkey_manager: ^0.2.3
+
+  # URL launcher (URL entry tiklama)
+  url_launcher: ^6.3.1
+
+  # Pencere boyut / konum / show-hide
+  window_manager: ^0.4.3
 
 dev_dependencies:
   flutter_test:

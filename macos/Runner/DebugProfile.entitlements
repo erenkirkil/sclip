@@ -6,6 +6,7 @@
 	<true/>
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
+	<!-- Sadece debug: Flutter Dart VM service localhost port'u acabilsin. Release.entitlements temiz. -->
 	<key>com.apple.security.network.server</key>
 	<true/>
 </dict>
