@@ -168,6 +168,34 @@ class _HomePageState extends State<HomePage> with WindowListener {
     }
   }
 
+  Future<void> _confirmClearAll(BuildContext context) async {
+    final scheme = Theme.of(context).colorScheme;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Geçmişi sil'),
+        content: const Text('Tüm pano geçmişi silinecek. Emin misin?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: scheme.error,
+              foregroundColor: scheme.onError,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Hepsini sil'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      _history.clear();
+    }
+  }
+
   Future<void> _quit() async {
     await windowManager.setPreventClose(false);
     await windowManager.destroy();
@@ -215,10 +243,12 @@ class _HomePageState extends State<HomePage> with WindowListener {
         actions: [
           ListenableBuilder(
             listenable: _history,
-            builder: (_, _) => IconButton(
+            builder: (context, _) => IconButton(
               tooltip: 'Hepsini sil',
               icon: const Icon(Icons.delete_sweep_outlined),
-              onPressed: _history.isEmpty ? null : _history.clear,
+              onPressed: _history.isEmpty
+                  ? null
+                  : () => _confirmClearAll(context),
             ),
           ),
         ],

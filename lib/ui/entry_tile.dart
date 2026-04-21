@@ -21,10 +21,18 @@ class ClipboardEntryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    // Pick colors that read very differently so keyboard focus on the tile
+    // (primary tint, "about to copy") is never confused with focus on the
+    // delete button (error tint, "about to delete").
+    final tileFocus = scheme.primary.withValues(alpha: 0.18);
+    final tileHover = scheme.primary.withValues(alpha: 0.08);
     return ListTile(
       dense: true,
       autofocus: autofocus,
       focusNode: focusNode,
+      focusColor: tileFocus,
+      hoverColor: tileHover,
       visualDensity: const VisualDensity(horizontal: -4, vertical: -3),
       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       minLeadingWidth: 0,
@@ -51,6 +59,27 @@ class ClipboardEntryTile extends StatelessWidget {
         icon: const Icon(Icons.close, size: 16),
         tooltip: 'Sil',
         onPressed: onDelete,
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.focused)) {
+              return scheme.error.withValues(alpha: 0.85);
+            }
+            if (states.contains(WidgetState.hovered) ||
+                states.contains(WidgetState.pressed)) {
+              return scheme.error.withValues(alpha: 0.7);
+            }
+            return null;
+          }),
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.focused) ||
+                states.contains(WidgetState.hovered) ||
+                states.contains(WidgetState.pressed)) {
+              return scheme.onError;
+            }
+            return null;
+          }),
+          overlayColor: WidgetStateProperty.all(Colors.transparent),
+        ),
       ),
     );
   }
