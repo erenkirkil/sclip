@@ -33,12 +33,13 @@ class HistoryList extends StatelessWidget {
         final entries = provider.entries;
         return ListView.separated(
           itemCount: entries.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
+          separatorBuilder: (_, _) => const Divider(height: 1),
           itemBuilder: (context, i) {
             final e = entries[i];
             return ClipboardEntryTile(
               key: ValueKey(e.id),
               entry: e,
+              autofocus: i == 0,
               onTap: () async {
                 await onEntryTap(e);
                 if (!context.mounted) return;

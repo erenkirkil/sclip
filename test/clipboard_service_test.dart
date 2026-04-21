@@ -28,6 +28,49 @@ void main() {
       await service.dispose();
     });
 
+    test('does not emit the clipboard content present at startup', () async {
+      // Simulate: OS clipboard already contains "existing" when app launches.
+      final service = ClipboardService(
+        interval: const Duration(milliseconds: 20),
+        entryReader: () async => ClipboardEntry.text('existing'),
+      );
+
+      final received = <ClipboardEntry>[];
+      final sub = service.entries.listen(received.add);
+
+      service.start();
+      await Future.delayed(const Duration(milliseconds: 120));
+
+      expect(received, isEmpty);
+
+      await sub.cancel();
+      await service.dispose();
+    });
+
+    test('emits only copies made after startup baseline', () async {
+      ClipboardEntry current = ClipboardEntry.text('existing-at-launch');
+      final service = ClipboardService(
+        interval: const Duration(milliseconds: 20),
+        entryReader: () async => current,
+      );
+
+      final received = <ClipboardEntry>[];
+      final sub = service.entries.listen(received.add);
+
+      service.start();
+      await Future.delayed(const Duration(milliseconds: 80));
+      expect(received, isEmpty);
+
+      current = ClipboardEntry.text('copied-later');
+      await Future.delayed(const Duration(milliseconds: 80));
+
+      expect(received.length, 1);
+      expect(received.first.text, 'copied-later');
+
+      await sub.cancel();
+      await service.dispose();
+    });
+
     test('does not re-emit identical content', () async {
       final entry = ClipboardEntry.text('same');
       final service = ClipboardService(
@@ -41,7 +84,9 @@ void main() {
       service.start();
       await Future.delayed(const Duration(milliseconds: 120));
 
-      expect(received.length, 1);
+      // Baseline swallows the first observation; any subsequent ticks with
+      // same content are suppressed by signature dedup.
+      expect(received, isEmpty);
 
       await sub.cancel();
       await service.dispose();

@@ -26,6 +26,7 @@ class ClipboardService {
   Timer? _timer;
   String? _lastSignature;
   bool _ticking = false;
+  bool _primed = false;
 
   Future<void> writeBack(ClipboardEntry entry) async {
     final clipboard = SystemClipboard.instance;
@@ -88,10 +89,19 @@ class ClipboardService {
         if (reader == null) return;
         entry = await _read(reader);
       }
-      if (entry == null) return;
+      if (entry == null) {
+        _primed = true;
+        return;
+      }
       final sig = _signature(entry);
       if (sig == _lastSignature) return;
       _lastSignature = sig;
+      if (!_primed) {
+        // First observation after start(): treat current clipboard as a
+        // baseline so restarts don't re-surface whatever was copied earlier.
+        _primed = true;
+        return;
+      }
       _controller.add(entry);
     } catch (_) {
       // Swallow transient read errors; next tick will retry.

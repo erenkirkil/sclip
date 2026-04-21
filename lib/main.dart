@@ -1,11 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'models/clipboard_entry.dart';
 import 'providers/history_provider.dart';
 import 'services/clipboard_service.dart';
+import 'services/hotkey_service.dart';
+import 'services/tray_service.dart';
 import 'ui/history_list.dart';
 
 Future<void> main() async {
@@ -13,8 +18,8 @@ Future<void> main() async {
   await windowManager.ensureInitialized();
 
   const windowOptions = WindowOptions(
-    size: Size(400, 600),
-    minimumSize: Size(320, 420),
+    size: Size(340, 460),
+    minimumSize: Size(300, 360),
     center: true,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
@@ -23,6 +28,7 @@ Future<void> main() async {
   );
 
   await windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.setPreventClose(true);
     await windowManager.show();
     await windowManager.focus();
   });
@@ -42,6 +48,7 @@ class SclipApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
+        
       ),
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -51,6 +58,7 @@ class SclipApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: const HomePage(),
+
     );
   }
 }
@@ -62,24 +70,96 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WindowListener {
+  static const _windowChannel = MethodChannel('sclip/window');
   final ClipboardService _service = ClipboardService();
   final HistoryProvider _history = HistoryProvider();
+  late final TrayService _tray;
+  late final HotkeyService _hotkey;
   StreamSubscription<ClipboardEntry>? _sub;
 
   @override
   void initState() {
     super.initState();
+    windowManager.addListener(this);
+
     _sub = _service.entries.listen(_history.add);
     _service.start();
+
+    _tray = TrayService(
+      onToggleWindow: _toggleWindow,
+      onClearAll: () async => _history.clear(),
+      onQuit: _quit,
+    );
+    _hotkey = HotkeyService(onToggleWindow: _toggleWindow);
+
+    _tray.init();
+    _hotkey.init();
   }
 
   @override
   void dispose() {
+    windowManager.removeListener(this);
     _sub?.cancel();
     _service.dispose();
     _history.dispose();
+    _tray.dispose();
+    _hotkey.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleWindow() async {
+    final visible = await windowManager.isVisible();
+    final focused = await windowManager.isFocused();
+    if (visible && focused) {
+      await _hideAndReturnFocus();
+    } else {
+      await _positionNearCursor();
+      await windowManager.show();
+      await windowManager.focus();
+    }
+  }
+
+  Future<void> _hideAndReturnFocus() async {
+    if (Platform.isMacOS) {
+      // Hand focus back to the previously-active app (e.g. Android Studio).
+      await _windowChannel.invokeMethod('hideAndDeactivate');
+    } else {
+      await windowManager.hide();
+    }
+  }
+
+  Future<void> _positionNearCursor() async {
+    try {
+      final cursor = await screenRetriever.getCursorScreenPoint();
+      final display = await screenRetriever.getPrimaryDisplay();
+      final size = await windowManager.getSize();
+      final screenSize = display.size;
+      final visible = display.visiblePosition ?? Offset.zero;
+      final scale = display.scaleFactor ?? 1.0;
+
+      // Align top-right of window slightly below-left of cursor so it doesn't
+      // cover the click point, and keep it clamped to the visible screen.
+      var x = cursor.dx - size.width / 2;
+      var y = cursor.dy + 12;
+
+      final minX = visible.dx + 8;
+      final minY = visible.dy + 8;
+      final maxX = visible.dx + screenSize.width / scale - size.width - 8;
+      final maxY = visible.dy + screenSize.height / scale - size.height - 8;
+
+      x = x.clamp(minX, maxX);
+      y = y.clamp(minY, maxY);
+
+      await windowManager.setPosition(Offset(x, y));
+    } catch (_) {
+      // Fall back to current position on any platform hiccup.
+    }
+  }
+
+  Future<void> _quit() async {
+    await windowManager.setPreventClose(false);
+    await windowManager.destroy();
   }
 
   Future<void> _onEntryTap(ClipboardEntry entry) async {
@@ -87,15 +167,25 @@ class _HomePageState extends State<HomePage> {
   }
 
   @override
+  void onWindowClose() async {
+    final preventClose = await windowManager.isPreventClose();
+    if (preventClose) {
+      await _hideAndReturnFocus();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('sclip'),
+        toolbarHeight: 40,
+        titleSpacing: 8,
+        title: const Text('sclip', style: TextStyle(fontSize: 14)),
         centerTitle: true,
         actions: [
           ListenableBuilder(
             listenable: _history,
-            builder: (_, __) => IconButton(
+            builder: (_, _) => IconButton(
               tooltip: 'Hepsini sil',
               icon: const Icon(Icons.delete_sweep_outlined),
               onPressed: _history.isEmpty ? null : _history.clear,

@@ -8,32 +8,44 @@ class ClipboardEntryTile extends StatelessWidget {
     required this.entry,
     required this.onTap,
     required this.onDelete,
+    this.autofocus = false,
   });
 
   final ClipboardEntry entry;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return ListTile(
       dense: true,
+      autofocus: autofocus,
+      visualDensity: const VisualDensity(horizontal: -4, vertical: -3),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      minLeadingWidth: 0,
+      horizontalTitleGap: 14,
       onTap: onTap,
       leading: _Leading(entry: entry),
       title: Text(
         entry.preview,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 13),
       ),
       subtitle: Text(
         _formatTime(entry.createdAt),
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.hintColor,
+          fontSize: 11,
         ),
       ),
       trailing: IconButton(
-        icon: const Icon(Icons.close, size: 18),
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+        visualDensity: VisualDensity.compact,
+        icon: const Icon(Icons.close, size: 16),
         tooltip: 'Sil',
         onPressed: onDelete,
       ),
@@ -83,7 +95,7 @@ class _Leading extends StatelessWidget {
               height: 48,
               fit: BoxFit.cover,
               gaplessPlayback: true,
-              errorBuilder: (_, __, ___) => const Icon(Icons.image),
+              errorBuilder: (_, _, _) => const Icon(Icons.image),
             ),
           );
         }
