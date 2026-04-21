@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:screen_retriever/screen_retriever.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'models/clipboard_entry.dart';
@@ -201,6 +202,13 @@ class _HomePageState extends State<HomePage> with WindowListener {
     await windowManager.destroy();
   }
 
+  Future<void> _onEntryOpen(ClipboardEntry entry) async {
+    final uri = entry.uris?.firstOrNull;
+    if (uri == null) return;
+    await _hideAndReturnFocus();
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   Future<void> _onEntryTap(ClipboardEntry entry) async {
     await _service.writeBack(entry);
     // Selecting an entry is the user's latest "copy"; bump it to the top so
@@ -256,6 +264,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
       body: HistoryList(
         provider: _history,
         onEntryTap: _onEntryTap,
+        onEntryOpen: _onEntryOpen,
         firstItemFocusNode: _firstItemFocus,
       ),
     );

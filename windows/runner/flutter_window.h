@@ -34,6 +34,10 @@ class FlutterWindow : public Win32Window {
   // Channel for sclip-specific window/paste controls.
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       window_channel_;
+
+  // Channel for clipboard metadata (sensitive-content detection).
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      clipboard_channel_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

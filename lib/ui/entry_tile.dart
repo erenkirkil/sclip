@@ -8,6 +8,7 @@ class ClipboardEntryTile extends StatelessWidget {
     required this.entry,
     required this.onTap,
     required this.onDelete,
+    this.onOpen,
     this.autofocus = false,
     this.focusNode,
   });
@@ -15,6 +16,7 @@ class ClipboardEntryTile extends StatelessWidget {
   final ClipboardEntry entry;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+  final VoidCallback? onOpen;
   final bool autofocus;
   final FocusNode? focusNode;
 
@@ -52,34 +54,69 @@ class ClipboardEntryTile extends StatelessWidget {
           fontSize: 11,
         ),
       ),
-      trailing: IconButton(
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-        visualDensity: VisualDensity.compact,
-        icon: const Icon(Icons.close, size: 16),
-        tooltip: 'Sil',
-        onPressed: onDelete,
-        style: ButtonStyle(
-          backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.focused)) {
-              return scheme.error.withValues(alpha: 0.85);
-            }
-            if (states.contains(WidgetState.hovered) ||
-                states.contains(WidgetState.pressed)) {
-              return scheme.error.withValues(alpha: 0.7);
-            }
-            return null;
-          }),
-          foregroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.focused) ||
-                states.contains(WidgetState.hovered) ||
-                states.contains(WidgetState.pressed)) {
-              return scheme.onError;
-            }
-            return null;
-          }),
-          overlayColor: WidgetStateProperty.all(Colors.transparent),
-        ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (onOpen != null && entry.type == ClipboardEntryType.url)
+            IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.open_in_new, size: 16),
+              tooltip: 'Tarayıcıda aç',
+              onPressed: onOpen,
+              style: ButtonStyle(
+                backgroundColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.focused)) {
+                    return scheme.primary.withValues(alpha: 0.85);
+                  }
+                  if (states.contains(WidgetState.hovered) ||
+                      states.contains(WidgetState.pressed)) {
+                    return scheme.primary.withValues(alpha: 0.7);
+                  }
+                  return null;
+                }),
+                foregroundColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.focused) ||
+                      states.contains(WidgetState.hovered) ||
+                      states.contains(WidgetState.pressed)) {
+                    return scheme.onPrimary;
+                  }
+                  return null;
+                }),
+                overlayColor: WidgetStateProperty.all(Colors.transparent),
+              ),
+            ),
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.close, size: 16),
+            tooltip: 'Sil',
+            onPressed: onDelete,
+            style: ButtonStyle(
+              backgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.focused)) {
+                  return scheme.error.withValues(alpha: 0.85);
+                }
+                if (states.contains(WidgetState.hovered) ||
+                    states.contains(WidgetState.pressed)) {
+                  return scheme.error.withValues(alpha: 0.7);
+                }
+                return null;
+              }),
+              foregroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.focused) ||
+                    states.contains(WidgetState.hovered) ||
+                    states.contains(WidgetState.pressed)) {
+                  return scheme.onError;
+                }
+                return null;
+              }),
+              overlayColor: WidgetStateProperty.all(Colors.transparent),
+            ),
+          ),
+        ],
       ),
     );
   }

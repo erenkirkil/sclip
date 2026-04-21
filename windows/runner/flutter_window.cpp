@@ -33,6 +33,50 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
+  clipboard_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "sclip/clipboard",
+          &flutter::StandardMethodCodec::GetInstance());
+  clipboard_channel_->SetMethodCallHandler(
+      [](const flutter::MethodCall<flutter::EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+             result) {
+        if (call.method_name() == "currentIsSensitive") {
+          // Password managers / Windows itself mark non-historyable clipboard
+          // payloads via these registered formats. "CanIncludeInClipboardHistory"
+          // carries a DWORD: 0 means exclude from history / managers.
+          // "ExcludeClipboardContentFromMonitoring" is a boolean-by-presence
+          // format used by 1Password, Bitwarden, etc.
+          UINT exclude_fmt = RegisterClipboardFormatW(
+              L"ExcludeClipboardContentFromMonitoring");
+          UINT history_fmt =
+              RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
+
+          bool sensitive = false;
+          if (OpenClipboard(nullptr)) {
+            if (exclude_fmt != 0 && IsClipboardFormatAvailable(exclude_fmt)) {
+              sensitive = true;
+            } else if (history_fmt != 0 &&
+                       IsClipboardFormatAvailable(history_fmt)) {
+              HANDLE h = GetClipboardData(history_fmt);
+              if (h != nullptr) {
+                DWORD* v = static_cast<DWORD*>(GlobalLock(h));
+                if (v != nullptr && *v == 0) {
+                  sensitive = true;
+                }
+                if (v != nullptr) {
+                  GlobalUnlock(h);
+                }
+              }
+            }
+            CloseClipboard();
+          }
+          result->Success(flutter::EncodableValue(sensitive));
+        } else {
+          result->NotImplemented();
+        }
+      });
+
   window_channel_ =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
           flutter_controller_->engine()->messenger(), "sclip/window",

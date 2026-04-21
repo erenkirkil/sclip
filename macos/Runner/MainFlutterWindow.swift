@@ -10,6 +10,27 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
+    let clipboardChannel = FlutterMethodChannel(
+      name: "sclip/clipboard",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    clipboardChannel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "currentIsSensitive":
+        // Password managers (1Password, Bitwarden, Keychain) mark their
+        // payload with org.nspasteboard.ConcealedType so clipboard managers
+        // know to skip it. See http://nspasteboard.org/.
+        let types = NSPasteboard.general.types ?? []
+        let sensitive = types.contains { t in
+          let s = t.rawValue
+          return s == "org.nspasteboard.ConcealedType"
+        }
+        result(sensitive)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
     let channel = FlutterMethodChannel(
       name: "sclip/window",
       binaryMessenger: flutterViewController.engine.binaryMessenger

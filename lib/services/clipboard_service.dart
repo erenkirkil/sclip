@@ -1,25 +1,31 @@
 import 'dart:async';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 
 import '../models/clipboard_entry.dart';
 
 typedef ClipboardReaderFactory = Future<ClipboardReader?> Function();
 typedef ClipboardEntryReader = Future<ClipboardEntry?> Function();
+typedef SensitiveProbe = Future<bool> Function();
 
 class ClipboardService {
   ClipboardService({
     Duration interval = const Duration(milliseconds: 500),
     ClipboardReaderFactory? readerFactory,
     ClipboardEntryReader? entryReader,
+    SensitiveProbe? sensitiveProbe,
   })  : _interval = interval,
         _readerFactory = readerFactory ?? _defaultReader,
-        _entryReaderOverride = entryReader;
+        _entryReaderOverride = entryReader,
+        _sensitiveProbe = sensitiveProbe ?? _defaultSensitiveProbe;
+
+  static const _metaChannel = MethodChannel('sclip/clipboard');
 
   final Duration _interval;
   final ClipboardReaderFactory _readerFactory;
   final ClipboardEntryReader? _entryReaderOverride;
+  final SensitiveProbe _sensitiveProbe;
   final StreamController<ClipboardEntry> _controller =
       StreamController<ClipboardEntry>.broadcast();
 
@@ -61,6 +67,18 @@ class ClipboardService {
     return clipboard.read();
   }
 
+  static Future<bool> _defaultSensitiveProbe() async {
+    try {
+      final v = await _metaChannel.invokeMethod<bool>('currentIsSensitive');
+      return v ?? false;
+    } on MissingPluginException {
+      // Platform without a handler (e.g. tests, linux) — treat as non-sensitive.
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   void start() {
     if (_timer != null) return;
     _timer = Timer.periodic(_interval, (_) => _tick());
@@ -81,6 +99,13 @@ class ClipboardService {
     if (_ticking) return;
     _ticking = true;
     try {
+      // Cheap probe first: if the OS pasteboard advertises a concealed /
+      // exclude-from-history type, skip the read entirely so password-manager
+      // payloads never land in our history (or even in-process memory).
+      // Don't touch _lastSignature here — leaving it alone means the next
+      // non-sensitive copy still registers as "new" and fires normally.
+      if (await _sensitiveProbe()) return;
+
       final ClipboardEntry? entry;
       if (_entryReaderOverride != null) {
         entry = await _entryReaderOverride();

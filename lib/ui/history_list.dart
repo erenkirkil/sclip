@@ -9,11 +9,13 @@ class HistoryList extends StatelessWidget {
     super.key,
     required this.provider,
     required this.onEntryTap,
+    required this.onEntryOpen,
     this.firstItemFocusNode,
   });
 
   final HistoryProvider provider;
   final Future<void> Function(ClipboardEntry entry) onEntryTap;
+  final Future<void> Function(ClipboardEntry entry) onEntryOpen;
   final FocusNode? firstItemFocusNode;
 
   @override
@@ -55,6 +57,9 @@ class HistoryList extends StatelessWidget {
                     ),
                   );
               },
+              onOpen: e.type == ClipboardEntryType.url
+                  ? () => onEntryOpen(e)
+                  : null,
               onDelete: () => provider.removeById(e.id),
             );
           },
