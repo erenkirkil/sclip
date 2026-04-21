@@ -22,13 +22,14 @@ Future<void> main() async {
     minimumSize: Size(300, 360),
     center: true,
     backgroundColor: Colors.transparent,
-    skipTaskbar: false,
+    skipTaskbar: true,
     titleBarStyle: TitleBarStyle.normal,
     title: 'sclip',
   );
 
   await windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.setPreventClose(true);
+    await windowManager.setSkipTaskbar(true);
     await windowManager.show();
     await windowManager.focus();
   });
@@ -48,7 +49,7 @@ class SclipApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
-        
+
       ),
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -76,6 +77,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
   final HistoryProvider _history = HistoryProvider();
   late final TrayService _tray;
   late final HotkeyService _hotkey;
+  final FocusNode _firstItemFocus = FocusNode(debugLabel: 'sclip-first-item');
   StreamSubscription<ClipboardEntry>? _sub;
 
   @override
@@ -105,6 +107,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
     _history.dispose();
     _tray.dispose();
     _hotkey.dispose();
+    _firstItemFocus.dispose();
     super.dispose();
   }
 
@@ -117,6 +120,14 @@ class _HomePageState extends State<HomePage> with WindowListener {
       await _positionNearCursor();
       await windowManager.show();
       await windowManager.focus();
+      // Give the compositor a frame to settle, then park focus on the first
+      // entry so a single Enter activates it (autofocus only fires on mount
+      // and the widget tree is preserved across hide/show).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_firstItemFocus.context != null) {
+          _firstItemFocus.requestFocus();
+        }
+      });
     }
   }
 
@@ -164,6 +175,25 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   Future<void> _onEntryTap(ClipboardEntry entry) async {
     await _service.writeBack(entry);
+    // Selecting an entry is the user's latest "copy"; bump it to the top so
+    // rapid re-use stays at the front of the list.
+    _history.add(entry);
+    // File entries can't be pasted via Ctrl/Cmd+V reliably; just copy.
+    if (entry.type == ClipboardEntryType.files) {
+      await _hideAndReturnFocus();
+      return;
+    }
+    if (Platform.isWindows) {
+      // Hide first so focus returns to the previously-active app, then let
+      // the native side send Ctrl+V after a short delay.
+      await windowManager.hide();
+    }
+    try {
+      await _windowChannel.invokeMethod('pasteToPrevious');
+    } on MissingPluginException {
+      // Platform without a paste handler — fall back to plain hide.
+      await _hideAndReturnFocus();
+    }
   }
 
   @override
@@ -196,6 +226,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
       body: HistoryList(
         provider: _history,
         onEntryTap: _onEntryTap,
+        firstItemFocusNode: _firstItemFocus,
       ),
     );
   }

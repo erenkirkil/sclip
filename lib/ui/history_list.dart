@@ -9,10 +9,12 @@ class HistoryList extends StatelessWidget {
     super.key,
     required this.provider,
     required this.onEntryTap,
+    this.firstItemFocusNode,
   });
 
   final HistoryProvider provider;
   final Future<void> Function(ClipboardEntry entry) onEntryTap;
+  final FocusNode? firstItemFocusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +42,7 @@ class HistoryList extends StatelessWidget {
               key: ValueKey(e.id),
               entry: e,
               autofocus: i == 0,
+              focusNode: i == 0 ? firstItemFocusNode : null,
               onTap: () async {
                 await onEntryTap(e);
                 if (!context.mounted) return;

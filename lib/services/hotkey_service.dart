@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
@@ -17,21 +18,37 @@ class HotkeyService {
     // Clean any leftovers from a prior run.
     await hotKeyManager.unregisterAll();
 
-    final modifiers = Platform.isMacOS
-        ? [HotKeyModifier.meta, HotKeyModifier.shift]
-        : [HotKeyModifier.control, HotKeyModifier.shift];
+    // Preferred combo per-platform, with a fallback if the OS rejects it
+    // (e.g. another app already grabbed the global shortcut on Windows).
+    final attempts = Platform.isMacOS
+        ? [
+            [HotKeyModifier.meta, HotKeyModifier.shift],
+          ]
+        : [
+            [HotKeyModifier.alt, HotKeyModifier.shift],
+            [HotKeyModifier.control, HotKeyModifier.alt],
+            [HotKeyModifier.control, HotKeyModifier.shift],
+          ];
 
-    final hk = HotKey(
-      key: PhysicalKeyboardKey.keyV,
-      modifiers: modifiers,
-      scope: HotKeyScope.system,
-    );
-
-    await hotKeyManager.register(
-      hk,
-      keyDownHandler: (_) => onToggleWindow(),
-    );
-    _registered = hk;
+    for (final modifiers in attempts) {
+      final hk = HotKey(
+        key: PhysicalKeyboardKey.keyV,
+        modifiers: modifiers,
+        scope: HotKeyScope.system,
+      );
+      try {
+        await hotKeyManager.register(
+          hk,
+          keyDownHandler: (_) => onToggleWindow(),
+        );
+        _registered = hk;
+        debugPrint('sclip: hotkey registered with $modifiers + V');
+        return;
+      } catch (e) {
+        debugPrint('sclip: hotkey registration failed for $modifiers + V: $e');
+      }
+    }
+    debugPrint('sclip: no global hotkey could be registered');
   }
 
   Future<void> dispose() async {

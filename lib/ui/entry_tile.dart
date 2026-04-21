@@ -9,12 +9,14 @@ class ClipboardEntryTile extends StatelessWidget {
     required this.onTap,
     required this.onDelete,
     this.autofocus = false,
+    this.focusNode,
   });
 
   final ClipboardEntry entry;
   final VoidCallback onTap;
   final VoidCallback onDelete;
   final bool autofocus;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +24,7 @@ class ClipboardEntryTile extends StatelessWidget {
     return ListTile(
       dense: true,
       autofocus: autofocus,
+      focusNode: focusNode,
       visualDensity: const VisualDensity(horizontal: -4, vertical: -3),
       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       minLeadingWidth: 0,

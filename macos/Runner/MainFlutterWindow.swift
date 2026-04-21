@@ -22,6 +22,22 @@ class MainFlutterWindow: NSWindow {
         // active after dismissing sclip.
         NSApp.hide(nil)
         result(nil)
+      case "pasteToPrevious":
+        // Hide sclip so the previously active app regains focus, then post
+        // Cmd+V into it. Requires Accessibility permission (System Settings →
+        // Privacy & Security → Accessibility).
+        NSApp.hide(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+          let src = CGEventSource(stateID: .combinedSessionState)
+          let vKey: CGKeyCode = 0x09
+          let down = CGEvent(keyboardEventSource: src, virtualKey: vKey, keyDown: true)
+          let up = CGEvent(keyboardEventSource: src, virtualKey: vKey, keyDown: false)
+          down?.flags = .maskCommand
+          up?.flags = .maskCommand
+          down?.post(tap: .cghidEventTap)
+          up?.post(tap: .cghidEventTap)
+        }
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
