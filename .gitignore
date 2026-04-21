@@ -1,0 +1,101 @@
+# ===== Claude / AI araçları =====
+.claude/
+.claude.json
+CLAUDE.md
+CONTEXT.md
+sprints/
+todos/
+TODO.md
+TODOS.md
+.aider*
+.cursor/
+.cursorrules
+.windsurf/
+
+# ===== macOS =====
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# ===== Windows =====
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ===== IDE / Editor =====
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+*~
+.history/
+.atom/
+
+# ===== Flutter / Dart =====
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+/build/
+/coverage/
+pubspec.lock.bak
+**/doc/api/
+**/generated_plugin_registrant.dart
+
+# ===== Dart obfuscation / symbol =====
+app.*.symbols
+app.*.map.json
+
+# ===== macOS (Flutter) =====
+**/macos/Flutter/ephemeral/
+**/macos/Pods/
+**/macos/.symlinks/
+**/macos/Flutter/Flutter-Debug.xcconfig
+**/macos/Flutter/Flutter-Release.xcconfig
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+
+# ===== Windows (Flutter) =====
+**/windows/flutter/ephemeral/
+**/windows/flutter/generated_plugin_registrant.*
+**/windows/flutter/generated_plugins.cmake
+
+# ===== Xcode =====
+**/xcuserdata/
+**/*.xcworkspace/xcuserdata/
+**/DerivedData/
+**/*.xcscmblueprint
+**/*.xccheckout
+
+# ===== Build artefaktları =====
+*.class
+*.log
+*.pyc
+.build/
+.buildlog/
+.swiftpm/
+migrate_working_dir/
+
+# ===== Ortam / Secret =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ===== Geçici =====
+tmp/
+temp/
+*.tmp
+*.bak
