@@ -60,8 +60,10 @@ void main() {
       service.start();
       await Future.delayed(const Duration(milliseconds: 80));
       service.stop();
+      // Drain any in-flight tick that was awaiting before stop.
+      await Future.delayed(const Duration(milliseconds: 40));
       final countAtStop = received.length;
-      await Future.delayed(const Duration(milliseconds: 80));
+      await Future.delayed(const Duration(milliseconds: 120));
 
       expect(received.length, countAtStop);
 

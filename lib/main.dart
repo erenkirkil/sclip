@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'models/clipboard_entry.dart';
+import 'providers/history_provider.dart';
 import 'services/clipboard_service.dart';
+import 'ui/history_list.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,16 +64,13 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final ClipboardService _service = ClipboardService();
-  final List<ClipboardEntry> _entries = [];
+  final HistoryProvider _history = HistoryProvider();
   StreamSubscription<ClipboardEntry>? _sub;
 
   @override
   void initState() {
     super.initState();
-    _sub = _service.entries.listen((entry) {
-      debugPrint('[clipboard] ${entry.type.name} · ${entry.preview}');
-      setState(() => _entries.insert(0, entry));
-    });
+    _sub = _service.entries.listen(_history.add);
     _service.start();
   }
 
@@ -79,7 +78,12 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _sub?.cancel();
     _service.dispose();
+    _history.dispose();
     super.dispose();
+  }
+
+  Future<void> _onEntryTap(ClipboardEntry entry) async {
+    await _service.writeBack(entry);
   }
 
   @override
@@ -88,64 +92,21 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('sclip'),
         centerTitle: true,
-      ),
-      body: _entries.isEmpty
-          ? const Center(
-              child: Text(
-                'Henüz içerik yok — bir şey kopyala',
-                textAlign: TextAlign.center,
-              ),
-            )
-          : ListView.separated(
-              itemCount: _entries.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (_, i) {
-                final e = _entries[i];
-                return ListTile(
-                  dense: true,
-                  leading: _leadingFor(e),
-                  title: Text(
-                    e.preview,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(e.type.name),
-                );
-              },
+        actions: [
+          ListenableBuilder(
+            listenable: _history,
+            builder: (_, __) => IconButton(
+              tooltip: 'Hepsini sil',
+              icon: const Icon(Icons.delete_sweep_outlined),
+              onPressed: _history.isEmpty ? null : _history.clear,
             ),
-    );
-  }
-
-  Widget _leadingFor(ClipboardEntry e) {
-    if (e.type == ClipboardEntryType.color) {
-      final argb = e.toArgb32();
-      if (argb != null) {
-        return Container(
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(
-            color: Color(argb),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: Colors.white24),
           ),
-        );
-      }
-    }
-    return Icon(_iconFor(e.type));
-  }
-
-  IconData _iconFor(ClipboardEntryType t) {
-    switch (t) {
-      case ClipboardEntryType.text:
-        return Icons.notes;
-      case ClipboardEntryType.url:
-        return Icons.link;
-      case ClipboardEntryType.image:
-        return Icons.image;
-      case ClipboardEntryType.files:
-        return Icons.folder;
-      case ClipboardEntryType.color:
-        return Icons.palette;
-    }
+        ],
+      ),
+      body: HistoryList(
+        provider: _history,
+        onEntryTap: _onEntryTap,
+      ),
+    );
   }
 }

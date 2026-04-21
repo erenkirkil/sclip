@@ -27,6 +27,30 @@ class ClipboardService {
   String? _lastSignature;
   bool _ticking = false;
 
+  Future<void> writeBack(ClipboardEntry entry) async {
+    final clipboard = SystemClipboard.instance;
+    if (clipboard == null) return;
+    final item = DataWriterItem();
+    switch (entry.type) {
+      case ClipboardEntryType.text:
+      case ClipboardEntryType.url:
+      case ClipboardEntryType.color:
+        final value = entry.text ?? '';
+        if (value.isEmpty) return;
+        item.add(Formats.plainText(value));
+        break;
+      case ClipboardEntryType.image:
+        final bytes = entry.imageBytes;
+        if (bytes == null || bytes.isEmpty) return;
+        item.add(Formats.png(bytes));
+        break;
+      case ClipboardEntryType.files:
+        return;
+    }
+    await clipboard.write([item]);
+    _lastSignature = _signature(entry);
+  }
+
   Stream<ClipboardEntry> get entries => _controller.stream;
   bool get isRunning => _timer != null;
 
