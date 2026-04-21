@@ -16,16 +16,29 @@ class MainFlutterWindow: NSWindow {
     )
     clipboardChannel.setMethodCallHandler { call, result in
       switch call.method {
-      case "currentIsSensitive":
-        // Password managers (1Password, Bitwarden, Keychain) mark their
-        // payload with org.nspasteboard.ConcealedType so clipboard managers
-        // know to skip it. See http://nspasteboard.org/.
-        let types = NSPasteboard.general.types ?? []
-        let sensitive = types.contains { t in
-          let s = t.rawValue
-          return s == "org.nspasteboard.ConcealedType"
-        }
-        result(sensitive)
+      case "currentState":
+        // Combined probe: monotonic change counter + concealed-type check.
+        // changeCount lets the Dart side skip ticks when the pasteboard
+        // hasn't moved. Concealed type (org.nspasteboard.ConcealedType) is
+        // the cross-app convention password managers set to opt out of
+        // history managers — see http://nspasteboard.org/.
+        let pb = NSPasteboard.general
+        let change = pb.changeCount
+        let types = pb.types ?? []
+        let sensitive = types.contains { $0.rawValue == "org.nspasteboard.ConcealedType" }
+        result(["change": change, "sensitive": sensitive])
+      case "isAccessibilityTrusted":
+        // Cmd+V posting via CGEvent requires Accessibility permission.
+        // Without it, pasteToPrevious silently fails — let Dart side know
+        // so it can surface a one-time banner pointing the user at System
+        // Settings.
+        result(AXIsProcessTrusted())
+      case "openAccessibilitySettings":
+        let url = URL(
+          string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        )!
+        NSWorkspace.shared.open(url)
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }

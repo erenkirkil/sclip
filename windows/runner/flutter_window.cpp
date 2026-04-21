@@ -10,6 +10,12 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+// The foreground window captured *before* sclip took focus. Paste routes
+// keystrokes here explicitly, so the race between hide/show and the
+// synthesised Ctrl+V can never land keys in sclip itself or a different
+// app that happened to steal focus in the interim.
+static HWND g_paste_target = nullptr;
+
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
@@ -41,12 +47,14 @@ bool FlutterWindow::OnCreate() {
       [](const flutter::MethodCall<flutter::EncodableValue>& call,
          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
              result) {
-        if (call.method_name() == "currentIsSensitive") {
-          // Password managers / Windows itself mark non-historyable clipboard
-          // payloads via these registered formats. "CanIncludeInClipboardHistory"
-          // carries a DWORD: 0 means exclude from history / managers.
-          // "ExcludeClipboardContentFromMonitoring" is a boolean-by-presence
-          // format used by 1Password, Bitwarden, etc.
+        if (call.method_name() == "currentState") {
+          // Combined probe: GetClipboardSequenceNumber lets the Dart side
+          // skip ticks when nothing has changed. Sensitive detection uses
+          // the two well-known registered formats password managers set:
+          // ExcludeClipboardContentFromMonitoring (presence) and
+          // CanIncludeInClipboardHistory (DWORD; 0 = exclude).
+          DWORD seq = GetClipboardSequenceNumber();
+
           UINT exclude_fmt = RegisterClipboardFormatW(
               L"ExcludeClipboardContentFromMonitoring");
           UINT history_fmt =
@@ -71,7 +79,13 @@ bool FlutterWindow::OnCreate() {
             }
             CloseClipboard();
           }
-          result->Success(flutter::EncodableValue(sensitive));
+
+          flutter::EncodableMap map;
+          map[flutter::EncodableValue("change")] =
+              flutter::EncodableValue(static_cast<int64_t>(seq));
+          map[flutter::EncodableValue("sensitive")] =
+              flutter::EncodableValue(sensitive);
+          result->Success(flutter::EncodableValue(map));
         } else {
           result->NotImplemented();
         }
@@ -85,12 +99,37 @@ bool FlutterWindow::OnCreate() {
       [](const flutter::MethodCall<flutter::EncodableValue>& call,
          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
              result) {
-        if (call.method_name() == "pasteToPrevious") {
-          // sclip window should already be hidden on the Dart side; wait a
-          // beat for the OS to restore focus to the previous app, then send
-          // Ctrl+V into it.
-          std::thread([]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(120));
+        if (call.method_name() == "captureForeground") {
+          // Called by the Dart side right before it shows sclip, so we
+          // remember where the user actually was. If the capture fails
+          // (nullptr) the paste handler falls back to the timing-based
+          // approach.
+          HWND fg = GetForegroundWindow();
+          g_paste_target = fg;
+          result->Success();
+        } else if (call.method_name() == "pasteToPrevious") {
+          // sclip window should already be hidden on the Dart side. Try to
+          // explicitly restore the captured target before sending keys so
+          // we're not at the mercy of whatever Windows decides to focus
+          // after our hide.
+          HWND target = g_paste_target;
+          std::thread([target]() {
+            if (target != nullptr && IsWindow(target)) {
+              DWORD pid = 0;
+              GetWindowThreadProcessId(target, &pid);
+              // Grants our permission for the other process to come
+              // forward — required by SetForegroundWindow's policy.
+              if (pid != 0) {
+                AllowSetForegroundWindow(pid);
+              }
+              SetForegroundWindow(target);
+              // Short settle time — Windows needs a moment to actually
+              // promote the window and update the focused thread queue.
+              std::this_thread::sleep_for(std::chrono::milliseconds(60));
+            } else {
+              // Fallback: whatever Windows hands focus to next.
+              std::this_thread::sleep_for(std::chrono::milliseconds(120));
+            }
             INPUT inputs[4] = {};
             inputs[0].type = INPUT_KEYBOARD;
             inputs[0].ki.wVk = VK_CONTROL;

@@ -1,14 +1,21 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
+
 enum ClipboardEntryType { text, image, url, files, color }
+
+enum ClipboardImageFormat { png, jpeg, gif, webp }
 
 class ClipboardEntry {
   ClipboardEntry._({
     required this.id,
     required this.type,
     required this.createdAt,
+    required this.contentHash,
     this.text,
     this.imageBytes,
+    this.imageFormat,
     this.uris,
     this.isSensitive = false,
   });
@@ -18,8 +25,15 @@ class ClipboardEntry {
   final DateTime createdAt;
   final String? text;
   final Uint8List? imageBytes;
+  final ClipboardImageFormat? imageFormat;
   final List<Uri>? uris;
   final bool isSensitive;
+
+  /// Short SHA-256 fingerprint of the content. Used for dedup across the
+  /// history and as the clipboard-service change-detection signature. Does
+  /// NOT include createdAt/id, so two reads of the same content produce the
+  /// same hash.
+  final String contentHash;
 
   factory ClipboardEntry.text(String value, {bool isSensitive = false}) {
     return ClipboardEntry._(
@@ -28,49 +42,77 @@ class ClipboardEntry {
       createdAt: DateTime.now(),
       text: value,
       isSensitive: isSensitive,
+      contentHash: _hashText('t', value),
     );
   }
 
   factory ClipboardEntry.url(Uri uri, {bool isSensitive = false}) {
+    final s = uri.toString();
     return ClipboardEntry._(
       id: _newId(),
       type: ClipboardEntryType.url,
       createdAt: DateTime.now(),
-      text: uri.toString(),
+      text: s,
       uris: [uri],
       isSensitive: isSensitive,
+      contentHash: _hashText('u', s),
     );
   }
 
-  factory ClipboardEntry.image(Uint8List bytes, {bool isSensitive = false}) {
+  factory ClipboardEntry.image(
+    Uint8List bytes, {
+    ClipboardImageFormat format = ClipboardImageFormat.png,
+    bool isSensitive = false,
+  }) {
     return ClipboardEntry._(
       id: _newId(),
       type: ClipboardEntryType.image,
       createdAt: DateTime.now(),
       imageBytes: bytes,
+      imageFormat: format,
       isSensitive: isSensitive,
+      contentHash: _hashBytes('i', bytes),
     );
   }
 
   factory ClipboardEntry.color(String hex, {bool isSensitive = false}) {
+    final normalized = normalizeHexColor(hex);
     return ClipboardEntry._(
       id: _newId(),
       type: ClipboardEntryType.color,
       createdAt: DateTime.now(),
-      text: normalizeHexColor(hex),
+      text: normalized,
       isSensitive: isSensitive,
+      contentHash: _hashText('c', normalized),
     );
   }
 
   factory ClipboardEntry.files(List<Uri> files, {bool isSensitive = false}) {
+    final joined = files.map((u) => u.toString()).join('|');
     return ClipboardEntry._(
       id: _newId(),
       type: ClipboardEntryType.files,
       createdAt: DateTime.now(),
       uris: files,
       isSensitive: isSensitive,
+      contentHash: _hashText('f', joined),
     );
   }
+
+  /// Returns a fresh copy that keeps id + content + hash but updates
+  /// createdAt. Used when the user taps an existing entry to re-copy it so
+  /// the "just now" label reflects the latest action.
+  ClipboardEntry touched() => ClipboardEntry._(
+        id: id,
+        type: type,
+        createdAt: DateTime.now(),
+        text: text,
+        imageBytes: imageBytes,
+        imageFormat: imageFormat,
+        uris: uris,
+        isSensitive: isSensitive,
+        contentHash: contentHash,
+      );
 
   String get preview {
     switch (type) {
@@ -82,7 +124,8 @@ class ClipboardEntry {
         return text ?? '';
       case ClipboardEntryType.image:
         final kb = (imageBytes?.lengthInBytes ?? 0) ~/ 1024;
-        return 'Image · ${kb}KB';
+        final fmt = imageFormat?.name.toUpperCase() ?? 'IMG';
+        return '$fmt · ${kb}KB';
       case ClipboardEntryType.files:
         final n = uris?.length ?? 0;
         if (n == 0) return 'Files';
@@ -95,6 +138,19 @@ class ClipboardEntry {
   static String _newId() {
     _counter++;
     return '${DateTime.now().microsecondsSinceEpoch}-$_counter';
+  }
+
+  /// 64-bit truncation of SHA-256 over `prefix:value`. Collision probability
+  /// at history size 30 is negligible (~ 2.4e-15) and 16-char strings are
+  /// cheap to compare / store.
+  static String _hashText(String prefix, String value) {
+    final bytes = utf8.encode('$prefix:$value');
+    return '$prefix:${sha256.convert(bytes).toString().substring(0, 16)}';
+  }
+
+  static String _hashBytes(String prefix, Uint8List bytes) {
+    final digest = sha256.convert(bytes).toString().substring(0, 16);
+    return '$prefix:${bytes.length}:$digest';
   }
 
   static final RegExp _hexColorRe =

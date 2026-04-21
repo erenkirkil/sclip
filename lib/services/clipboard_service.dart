@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 
@@ -7,30 +9,54 @@ import '../models/clipboard_entry.dart';
 
 typedef ClipboardReaderFactory = Future<ClipboardReader?> Function();
 typedef ClipboardEntryReader = Future<ClipboardEntry?> Function();
-typedef SensitiveProbe = Future<bool> Function();
+
+/// Snapshot returned by the native `currentState` channel: a monotonic
+/// change counter (macOS NSPasteboard.changeCount / Windows
+/// GetClipboardSequenceNumber) and a sensitive-content flag. A missing
+/// native handler is expressed as [ClipboardState.unavailable].
+class ClipboardState {
+  const ClipboardState({required this.change, required this.sensitive});
+
+  static const unavailable = ClipboardState(change: -1, sensitive: false);
+
+  final int change;
+  final bool sensitive;
+}
+
+typedef ClipboardStateProbe = Future<ClipboardState> Function();
 
 class ClipboardService {
   ClipboardService({
     Duration interval = const Duration(milliseconds: 500),
     ClipboardReaderFactory? readerFactory,
     ClipboardEntryReader? entryReader,
-    SensitiveProbe? sensitiveProbe,
+    ClipboardStateProbe? stateProbe,
   })  : _interval = interval,
         _readerFactory = readerFactory ?? _defaultReader,
         _entryReaderOverride = entryReader,
-        _sensitiveProbe = sensitiveProbe ?? _defaultSensitiveProbe;
+        _stateProbe = stateProbe ?? _defaultStateProbe;
 
   static const _metaChannel = MethodChannel('sclip/clipboard');
 
   final Duration _interval;
   final ClipboardReaderFactory _readerFactory;
   final ClipboardEntryReader? _entryReaderOverride;
-  final SensitiveProbe _sensitiveProbe;
+  final ClipboardStateProbe _stateProbe;
   final StreamController<ClipboardEntry> _controller =
       StreamController<ClipboardEntry>.broadcast();
 
   Timer? _timer;
+
+  /// Last seen native change counter. -1 means "not yet observed". When this
+  /// matches the current native value, we skip the tick entirely — no read,
+  /// no super_clipboard call — so idle CPU stays near zero.
+  int _lastChange = -1;
+
+  /// Content fingerprint of the most recently observed entry. Lets us
+  /// ignore our own writeBack (the OS change counter bumps on every write,
+  /// including ours).
   String? _lastSignature;
+
   bool _ticking = false;
   bool _primed = false;
 
@@ -49,13 +75,23 @@ class ClipboardService {
       case ClipboardEntryType.image:
         final bytes = entry.imageBytes;
         if (bytes == null || bytes.isEmpty) return;
-        item.add(Formats.png(bytes));
+        switch (entry.imageFormat) {
+          case ClipboardImageFormat.jpeg:
+            item.add(Formats.jpeg(bytes));
+          case ClipboardImageFormat.gif:
+            item.add(Formats.gif(bytes));
+          case ClipboardImageFormat.webp:
+            item.add(Formats.webp(bytes));
+          case ClipboardImageFormat.png:
+          case null:
+            item.add(Formats.png(bytes));
+        }
         break;
       case ClipboardEntryType.files:
         return;
     }
     await clipboard.write([item]);
-    _lastSignature = _signature(entry);
+    _lastSignature = entry.contentHash;
   }
 
   Stream<ClipboardEntry> get entries => _controller.stream;
@@ -67,15 +103,21 @@ class ClipboardService {
     return clipboard.read();
   }
 
-  static Future<bool> _defaultSensitiveProbe() async {
+  static Future<ClipboardState> _defaultStateProbe() async {
     try {
-      final v = await _metaChannel.invokeMethod<bool>('currentIsSensitive');
-      return v ?? false;
+      final v = await _metaChannel.invokeMapMethod<String, dynamic>(
+        'currentState',
+      );
+      if (v == null) return ClipboardState.unavailable;
+      return ClipboardState(
+        change: (v['change'] as int?) ?? -1,
+        sensitive: (v['sensitive'] as bool?) ?? false,
+      );
     } on MissingPluginException {
-      // Platform without a handler (e.g. tests, linux) — treat as non-sensitive.
-      return false;
-    } catch (_) {
-      return false;
+      return ClipboardState.unavailable;
+    } catch (e) {
+      debugPrint('sclip: clipboard state probe failed: $e');
+      return ClipboardState.unavailable;
     }
   }
 
@@ -99,13 +141,22 @@ class ClipboardService {
     if (_ticking) return;
     _ticking = true;
     try {
-      // Cheap probe first: if the OS pasteboard advertises a concealed /
-      // exclude-from-history type, skip the read entirely so password-manager
-      // payloads never land in our history (or even in-process memory).
-      // Don't touch _lastSignature here — leaving it alone means the next
-      // non-sensitive copy still registers as "new" and fires normally.
-      if (await _sensitiveProbe()) return;
+      // Step 1 — cheap native probe. If the change counter hasn't moved,
+      // the clipboard hasn't been touched since our last tick, so we skip
+      // all work (no IPC to super_clipboard, no decoding, no allocations).
+      final state = await _stateProbe();
+      if (state.change != -1) {
+        if (state.change == _lastChange) return;
+        _lastChange = state.change;
+      }
 
+      // Step 2 — sensitive check. Password-manager payloads advertise a
+      // concealed type; skip the read entirely so secrets never enter the
+      // Dart heap. _lastSignature is intentionally left untouched so the
+      // next non-sensitive copy still counts as "new".
+      if (state.sensitive) return;
+
+      // Step 3 — read content.
       final ClipboardEntry? entry;
       if (_entryReaderOverride != null) {
         entry = await _entryReaderOverride();
@@ -118,9 +169,13 @@ class ClipboardService {
         _primed = true;
         return;
       }
-      final sig = _signature(entry);
-      if (sig == _lastSignature) return;
-      _lastSignature = sig;
+
+      // Step 4 — content fingerprint dedup. Catches our own writeBack
+      // (change counter bumps on every write, including writes we
+      // initiated) and anything else that matches prior content.
+      if (entry.contentHash == _lastSignature) return;
+      _lastSignature = entry.contentHash;
+
       if (!_primed) {
         // First observation after start(): treat current clipboard as a
         // baseline so restarts don't re-surface whatever was copied earlier.
@@ -128,18 +183,44 @@ class ClipboardService {
         return;
       }
       _controller.add(entry);
-    } catch (_) {
-      // Swallow transient read errors; next tick will retry.
+    } catch (e) {
+      debugPrint('sclip: clipboard tick failed: $e');
     } finally {
       _ticking = false;
     }
   }
 
+  static final _svgFormat = SimpleFileFormat(
+    uniformTypeIdentifiers: ['public.svg-image'],
+    mimeTypes: ['image/svg+xml'],
+  );
+
   Future<ClipboardEntry?> _read(ClipboardReader reader) async {
-    if (reader.canProvide(Formats.png)) {
-      final bytes = await _readBinary(reader, Formats.png);
+    // Image formats, tried in order. PNG first because macOS screenshots
+    // and most screenshot tools emit it; JPEG for photos; GIF/WebP for
+    // browser "Copy Image" flows.
+    final imageAttempts = [
+      (Formats.png, ClipboardImageFormat.png),
+      (Formats.jpeg, ClipboardImageFormat.jpeg),
+      (Formats.gif, ClipboardImageFormat.gif),
+      (Formats.webp, ClipboardImageFormat.webp),
+    ];
+    for (final (format, tag) in imageAttempts) {
+      if (!reader.canProvide(format)) continue;
+      final bytes = await _readBinary(reader, format);
       if (bytes != null && bytes.isNotEmpty) {
-        return ClipboardEntry.image(bytes);
+        return ClipboardEntry.image(bytes, format: tag);
+      }
+    }
+
+    if (reader.canProvide(_svgFormat)) {
+      final bytes = await _readBinary(reader, _svgFormat);
+      if (bytes != null && bytes.isNotEmpty) {
+        try {
+          return ClipboardEntry.text(utf8.decode(bytes));
+        } catch (_) {
+          // Non-UTF-8 payload — skip SVG
+        }
       }
     }
 
@@ -196,31 +277,13 @@ class ClipboardService {
         final bytes = await file.readAll();
         if (!completer.isCompleted) completer.complete(bytes);
       } catch (e) {
+        debugPrint('sclip: binary read failed for ${format.runtimeType}: $e');
         if (!completer.isCompleted) completer.complete(null);
       }
-    }, onError: (_) {
+    }, onError: (e) {
+      debugPrint('sclip: binary read errored: $e');
       if (!completer.isCompleted) completer.complete(null);
     });
     return completer.future;
-  }
-
-  String _signature(ClipboardEntry entry) {
-    switch (entry.type) {
-      case ClipboardEntryType.text:
-      case ClipboardEntryType.url:
-      case ClipboardEntryType.color:
-        return 'txt:${entry.text}';
-      case ClipboardEntryType.image:
-        final bytes = entry.imageBytes;
-        if (bytes == null || bytes.isEmpty) return 'img:0';
-        final len = bytes.length;
-        var sum = 0;
-        for (var i = 0; i < bytes.length; i += (bytes.length ~/ 64).clamp(1, 1024)) {
-          sum = (sum + bytes[i]) & 0xFFFFFF;
-        }
-        return 'img:$len:$sum';
-      case ClipboardEntryType.files:
-        return 'files:${entry.uris?.map((u) => u.toString()).join("|")}';
-    }
   }
 }

@@ -73,5 +73,48 @@ void main() {
       final ids = List.generate(50, (_) => ClipboardEntry.text('a').id);
       expect(ids.toSet().length, ids.length);
     });
+
+    test('contentHash is stable for identical content across instances', () {
+      final a = ClipboardEntry.text('same content');
+      final b = ClipboardEntry.text('same content');
+      expect(a.contentHash, b.contentHash);
+      expect(a.id, isNot(b.id));
+    });
+
+    test('contentHash differs across types with equal text', () {
+      final txt = ClipboardEntry.text('example.com');
+      final url = ClipboardEntry.url(Uri.parse('https://example.com'));
+      final color = ClipboardEntry.color('#ff0000');
+      final txtColor = ClipboardEntry.text('#ff0000');
+      expect(txt.contentHash, isNot(url.contentHash));
+      expect(color.contentHash, isNot(txtColor.contentHash));
+    });
+
+    test('image contentHash reflects byte content', () {
+      final a = ClipboardEntry.image(Uint8List.fromList([1, 2, 3, 4]));
+      final b = ClipboardEntry.image(Uint8List.fromList([1, 2, 3, 4]));
+      final c = ClipboardEntry.image(Uint8List.fromList([1, 2, 3, 5]));
+      expect(a.contentHash, b.contentHash);
+      expect(a.contentHash, isNot(c.contentHash));
+    });
+
+    test('touched keeps identity and hash, refreshes createdAt', () async {
+      final a = ClipboardEntry.text('payload');
+      await Future.delayed(const Duration(milliseconds: 5));
+      final t = a.touched();
+      expect(t.id, a.id);
+      expect(t.contentHash, a.contentHash);
+      expect(t.text, a.text);
+      expect(t.createdAt.isAfter(a.createdAt), isTrue);
+    });
+
+    test('image factory tracks format tag', () {
+      final jpeg = ClipboardEntry.image(
+        Uint8List.fromList([0xff, 0xd8, 0xff]),
+        format: ClipboardImageFormat.jpeg,
+      );
+      expect(jpeg.imageFormat, ClipboardImageFormat.jpeg);
+      expect(jpeg.preview, startsWith('JPEG'));
+    });
   });
 }

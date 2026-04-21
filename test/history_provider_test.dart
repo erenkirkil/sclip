@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sclip/models/clipboard_entry.dart';
 import 'package:sclip/providers/history_provider.dart';
@@ -79,6 +81,67 @@ void main() {
       p.clear();
       expect(p.isEmpty, isTrue);
       expect(notified, 2);
+    });
+
+    test('touch refreshes createdAt and moves entry to head', () async {
+      final p = HistoryProvider();
+      final a = ClipboardEntry.text('a');
+      p.add(a);
+      p.add(ClipboardEntry.text('b'));
+      p.add(ClipboardEntry.text('c'));
+
+      // Ensure some wall-clock delta is measurable.
+      await Future.delayed(const Duration(milliseconds: 5));
+
+      p.touch(a.id);
+
+      expect(p.entries.first.id, a.id);
+      expect(p.entries.first.text, 'a');
+      expect(
+        p.entries.first.createdAt.isAfter(a.createdAt),
+        isTrue,
+        reason: 'touched entry should have a fresh timestamp',
+      );
+    });
+
+    test('touch is a no-op for unknown ids', () {
+      final p = HistoryProvider();
+      p.add(ClipboardEntry.text('a'));
+      var notified = 0;
+      p.addListener(() => notified++);
+
+      p.touch('does-not-exist');
+      expect(notified, 0);
+    });
+
+    test('drops image entries larger than maxImageBytes', () {
+      final p = HistoryProvider(maxImageBytes: 100);
+      final small = ClipboardEntry.image(
+        Uint8List.fromList(List.filled(50, 1)),
+      );
+      final big = ClipboardEntry.image(
+        Uint8List.fromList(List.filled(200, 1)),
+      );
+
+      p.add(small);
+      p.add(big);
+
+      expect(p.length, 1);
+      expect(p.entries.first.id, small.id);
+    });
+
+    test('hash-based dedup treats rebuilt entries with same content as one', () {
+      final p = HistoryProvider();
+
+      // Simulates: user copies same text again from outside — clipboard
+      // service produces a fresh entry (new id, new createdAt) but same
+      // contentHash. Should dedupe rather than accumulate.
+      p.add(ClipboardEntry.text('shared'));
+      p.add(ClipboardEntry.text('other'));
+      p.add(ClipboardEntry.text('shared'));
+
+      expect(p.length, 2);
+      expect(p.entries.first.text, 'shared');
     });
   });
 }

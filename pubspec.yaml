@@ -51,6 +51,9 @@ dependencies:
   # Cursor / ekran koordinatlari (pencereyi imlecin yanina konumlandirma)
   screen_retriever: ^0.2.0
 
+  # SHA-256 ile entry dedup hash'i (icerik parmak izi)
+  crypto: ^3.0.6
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -74,12 +74,18 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WindowListener {
   static const _windowChannel = MethodChannel('sclip/window');
+  static const _clipboardChannel = MethodChannel('sclip/clipboard');
   final ClipboardService _service = ClipboardService();
   final HistoryProvider _history = HistoryProvider();
   late final TrayService _tray;
   late final HotkeyService _hotkey;
   final FocusNode _firstItemFocus = FocusNode(debugLabel: 'sclip-first-item');
   StreamSubscription<ClipboardEntry>? _sub;
+
+  /// True once we've confirmed macOS Accessibility is granted (or we're on a
+  /// platform where it doesn't apply). While false on macOS, the paste-to-
+  /// previous path silently fails, so we surface a one-time banner.
+  bool _accessibilityOk = !Platform.isMacOS;
 
   @override
   void initState() {
@@ -98,6 +104,21 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
     _tray.init();
     _hotkey.init();
+    _checkAccessibility();
+  }
+
+  Future<void> _checkAccessibility() async {
+    if (!Platform.isMacOS) return;
+    try {
+      final trusted =
+          await _clipboardChannel.invokeMethod<bool>('isAccessibilityTrusted');
+      if (!mounted) return;
+      setState(() => _accessibilityOk = trusted ?? false);
+    } on PlatformException catch (e) {
+      debugPrint('sclip: accessibility probe failed: $e');
+    } on MissingPluginException {
+      // Channel not wired (e.g. tests) — assume fine.
+    }
   }
 
   @override
@@ -118,9 +139,26 @@ class _HomePageState extends State<HomePage> with WindowListener {
     if (visible && focused) {
       await _hideAndReturnFocus();
     } else {
+      // Remember who currently owns the foreground so the native paste
+      // handler can restore it precisely instead of racing with whatever
+      // Windows decides to focus next. macOS handles this deterministically
+      // via NSApp.hide, no capture needed there.
+      if (Platform.isWindows) {
+        try {
+          await _windowChannel.invokeMethod('captureForeground');
+        } on MissingPluginException {
+          // Older Windows build without the handler — paste path falls back
+          // to the timing-based behaviour.
+        } catch (e) {
+          debugPrint('sclip: captureForeground failed: $e');
+        }
+      }
       await _positionNearCursor();
       await windowManager.show();
       await windowManager.focus();
+      // Re-check Accessibility on every show so the banner disappears the
+      // moment the user grants permission, without requiring an app restart.
+      unawaited(_checkAccessibility());
       // Give the compositor a frame to settle, then park focus on the first
       // entry so a single Enter activates it (autofocus only fires on mount
       // and the widget tree is preserved across hide/show).
@@ -164,8 +202,10 @@ class _HomePageState extends State<HomePage> with WindowListener {
       y = y.clamp(minY, maxY);
 
       await windowManager.setPosition(Offset(x, y));
-    } catch (_) {
-      // Fall back to current position on any platform hiccup.
+    } catch (e) {
+      // Fall back to current position on any platform hiccup (e.g. cursor
+      // on a disconnected monitor, permission races on first launch).
+      debugPrint('sclip: positionNearCursor failed: $e');
     }
   }
 
@@ -211,9 +251,10 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   Future<void> _onEntryTap(ClipboardEntry entry) async {
     await _service.writeBack(entry);
-    // Selecting an entry is the user's latest "copy"; bump it to the top so
-    // rapid re-use stays at the front of the list.
-    _history.add(entry);
+    // Re-using an existing entry should bump it to the top with a fresh
+    // timestamp — touch() keeps the id stable so widget keys don't churn
+    // and the "just now" label reflects the latest action.
+    _history.touch(entry.id);
     // File entries can't be pasted via Ctrl/Cmd+V reliably; just copy.
     if (entry.type == ClipboardEntryType.files) {
       await _hideAndReturnFocus();
@@ -240,8 +281,19 @@ class _HomePageState extends State<HomePage> with WindowListener {
     }
   }
 
+  Future<void> _openAccessibilitySettings() async {
+    try {
+      await _clipboardChannel.invokeMethod('openAccessibilitySettings');
+    } on MissingPluginException {
+      // Not wired on this platform — banner shouldn't be visible anyway.
+    } catch (e) {
+      debugPrint('sclip: open accessibility settings failed: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 40,
@@ -261,11 +313,57 @@ class _HomePageState extends State<HomePage> with WindowListener {
           ),
         ],
       ),
-      body: HistoryList(
-        provider: _history,
-        onEntryTap: _onEntryTap,
-        onEntryOpen: _onEntryOpen,
-        firstItemFocusNode: _firstItemFocus,
+      body: Column(
+        children: [
+          if (!_accessibilityOk)
+            Material(
+              color: scheme.errorContainer,
+              child: InkWell(
+                onTap: _openAccessibilitySettings,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.lock_outline,
+                        size: 16,
+                        color: scheme.onErrorContainer,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Otomatik yapıştırma için Accessibility izni gerek.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: scheme.onErrorContainer,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        'Ayarları aç',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onErrorContainer,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          Expanded(
+            child: HistoryList(
+              provider: _history,
+              onEntryTap: _onEntryTap,
+              onEntryOpen: _onEntryOpen,
+              firstItemFocusNode: _firstItemFocus,
+            ),
+          ),
+        ],
       ),
     );
   }

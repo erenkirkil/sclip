@@ -3,20 +3,46 @@ import 'package:flutter/foundation.dart';
 import '../models/clipboard_entry.dart';
 
 class HistoryProvider extends ChangeNotifier {
-  HistoryProvider({this.maxItems = 200});
+  HistoryProvider({
+    this.maxItems = 30,
+    this.maxImageBytes = 5 * 1024 * 1024,
+  });
 
+  /// Default kept conservative — clipboard managers balloon RAM quickly
+  /// when users copy screenshots. 30 is comfortable for daily use.
   final int maxItems;
+
+  /// Per-entry image byte cap. Anything larger is dropped on ingest so a
+  /// single oversized paste can't push the process into hundreds of MB.
+  final int maxImageBytes;
+
   final List<ClipboardEntry> _entries = [];
 
   List<ClipboardEntry> get entries => List.unmodifiable(_entries);
   int get length => _entries.length;
   bool get isEmpty => _entries.isEmpty;
 
+  /// Ingests a new entry. Hash-based dedup: if an entry with the same
+  /// content hash already exists, it's removed so the new one rises to the
+  /// top with a fresh timestamp. Oversized images are silently dropped.
   void add(ClipboardEntry entry) {
-    if (_entries.isNotEmpty && _isSameContent(_entries.first, entry)) {
+    if (entry.type == ClipboardEntryType.image) {
+      final bytes = entry.imageBytes;
+      if (bytes == null || bytes.lengthInBytes > maxImageBytes) {
+        debugPrint(
+          'sclip: dropping oversized image entry '
+          '(${bytes?.lengthInBytes ?? 0} bytes > $maxImageBytes)',
+        );
+        return;
+      }
+    }
+
+    if (_entries.isNotEmpty &&
+        _entries.first.contentHash == entry.contentHash) {
       return;
     }
-    final existingIndex = _entries.indexWhere((e) => _isSameContent(e, entry));
+    final existingIndex =
+        _entries.indexWhere((e) => e.contentHash == entry.contentHash);
     if (existingIndex >= 0) {
       _entries.removeAt(existingIndex);
     }
@@ -24,6 +50,19 @@ class HistoryProvider extends ChangeNotifier {
     if (_entries.length > maxItems) {
       _entries.removeRange(maxItems, _entries.length);
     }
+    notifyListeners();
+  }
+
+  /// Moves the entry with [id] to the top and refreshes its createdAt
+  /// without changing any other field. Used when the user taps an existing
+  /// entry to re-copy it — the "just now" label should reflect the latest
+  /// action while keeping the entry identity stable for the widget key.
+  void touch(String id) {
+    final idx = _entries.indexWhere((e) => e.id == id);
+    if (idx < 0) return;
+    final entry = _entries[idx];
+    _entries.removeAt(idx);
+    _entries.insert(0, entry.touched());
     notifyListeners();
   }
 
@@ -42,29 +81,5 @@ class HistoryProvider extends ChangeNotifier {
     if (_entries.isEmpty) return;
     _entries.clear();
     notifyListeners();
-  }
-
-  bool _isSameContent(ClipboardEntry a, ClipboardEntry b) {
-    if (a.type != b.type) return false;
-    switch (a.type) {
-      case ClipboardEntryType.text:
-      case ClipboardEntryType.url:
-      case ClipboardEntryType.color:
-        return a.text == b.text;
-      case ClipboardEntryType.image:
-        final ab = a.imageBytes;
-        final bb = b.imageBytes;
-        if (ab == null || bb == null) return false;
-        if (ab.length != bb.length) return false;
-        return identical(ab, bb);
-      case ClipboardEntryType.files:
-        final au = a.uris ?? const [];
-        final bu = b.uris ?? const [];
-        if (au.length != bu.length) return false;
-        for (var i = 0; i < au.length; i++) {
-          if (au[i] != bu[i]) return false;
-        }
-        return true;
-    }
   }
 }
