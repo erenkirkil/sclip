@@ -166,6 +166,51 @@ void main() {
       expect(p.entries.first.type, ClipboardEntryType.imageSet);
     });
 
+    test('evicts oldest image entry when total image bytes exceed cap', () {
+      // 250 byte budget; each image is 100 bytes → three would blow the cap.
+      final p = HistoryProvider(
+        maxImageBytes: 1000,
+        maxTotalImageBytes: 250,
+      );
+      final a = ClipboardEntry.image(Uint8List.fromList(List.filled(100, 1)));
+      final b = ClipboardEntry.image(Uint8List.fromList(List.filled(100, 2)));
+      final c = ClipboardEntry.image(Uint8List.fromList(List.filled(100, 3)));
+      final txt = ClipboardEntry.text('keep-me');
+
+      p.add(a);
+      p.add(txt);
+      p.add(b);
+      expect(p.length, 3);
+
+      // Adding c would make image total 300 > 250 — oldest image (a) is
+      // evicted, but the non-image text entry stays.
+      p.add(c);
+      expect(p.length, 3);
+      expect(p.entries.any((e) => e.id == a.id), isFalse);
+      expect(p.entries.any((e) => e.id == txt.id), isTrue);
+      expect(p.entries.first.id, c.id);
+    });
+
+    test('dropping a too-large image leaves existing entries intact', () {
+      final p = HistoryProvider(
+        maxImageBytes: 1000,
+        maxTotalImageBytes: 150,
+      );
+      final small =
+          ClipboardEntry.image(Uint8List.fromList(List.filled(100, 1)));
+      p.add(small);
+
+      // 200 bytes alone exceeds the 150-byte total cap — even after evicting
+      // everything, it wouldn't fit. Must be dropped without clearing the
+      // existing valid entry.
+      final tooBig =
+          ClipboardEntry.image(Uint8List.fromList(List.filled(200, 2)));
+      p.add(tooBig);
+
+      expect(p.length, 1);
+      expect(p.entries.first.id, small.id);
+    });
+
     test('hash-based dedup treats rebuilt entries with same content as one', () {
       final p = HistoryProvider();
 

@@ -17,16 +17,38 @@ class MainFlutterWindow: NSWindow {
     clipboardChannel.setMethodCallHandler { call, result in
       switch call.method {
       case "currentState":
-        // Combined probe: monotonic change counter + concealed-type check.
-        // changeCount lets the Dart side skip ticks when the pasteboard
-        // hasn't moved. Concealed type (org.nspasteboard.ConcealedType) is
-        // the cross-app convention password managers set to opt out of
-        // history managers — see http://nspasteboard.org/.
+        // Combined probe: monotonic change counter + concealed-type check
+        // + file-promise short-circuit. changeCount lets the Dart side
+        // skip ticks when the pasteboard hasn't moved. Concealed type
+        // (org.nspasteboard.ConcealedType) is the cross-app convention
+        // password managers set to opt out of history managers — see
+        // http://nspasteboard.org/. hasFilePromise flags any payload
+        // carrying NSFilePromise identifiers so the Dart side can skip
+        // super_clipboard's read — touching a promise resolves it and
+        // silently empties the source app's clipboard, breaking the
+        // user's own Cmd+V (Finder, Android Studio, Xcode all do this).
+        // We check "has promise" rather than "is file-only" because
+        // Finder routinely adds public.utf8-plain-text (the filename)
+        // alongside the promise; skipping requires spotting the promise,
+        // not proving nothing else is there.
         let pb = NSPasteboard.general
         let change = pb.changeCount
         let types = pb.types ?? []
         let sensitive = types.contains { $0.rawValue == "org.nspasteboard.ConcealedType" }
-        result(["change": change, "sensitive": sensitive])
+        let promiseTypes: Set<String> = [
+          "com.apple.pasteboard.promised-file-url",
+          "com.apple.pasteboard.promised-file-name",
+          "com.apple.pasteboard.promised-file-content-type",
+          "com.apple.pasteboard.PromisedFileURL",
+          "com.apple.pasteboard.PromisedFileName",
+          "com.apple.pasteboard.PromisedFileContentType",
+        ]
+        let hasFilePromise = types.contains { promiseTypes.contains($0.rawValue) }
+        result([
+          "change": change,
+          "sensitive": sensitive,
+          "hasFilePromise": hasFilePromise,
+        ])
       case "isAccessibilityTrusted":
         // Cmd+V posting via CGEvent requires Accessibility permission.
         // Without it, pasteToPrevious silently fails — let Dart side know

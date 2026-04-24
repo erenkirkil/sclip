@@ -154,6 +154,44 @@ void main() {
       await service.dispose();
     });
 
+    test('skips reads when hasFilePromise flag is set', () async {
+      var currentChange = 0;
+      var reads = 0;
+      var hasPromise = true;
+      final service = ClipboardService(
+        interval: const Duration(milliseconds: 20),
+        entryReader: () async {
+          reads++;
+          return ClipboardEntry.text('should-not-be-read');
+        },
+        stateProbe: () async => ClipboardState(
+          change: ++currentChange,
+          sensitive: false,
+          hasFilePromise: hasPromise,
+        ),
+      );
+
+      final received = <ClipboardEntry>[];
+      final sub = service.entries.listen(received.add);
+
+      service.start();
+      await Future.delayed(const Duration(milliseconds: 80));
+      // Promise short-circuits the reader entirely — the probe bumps every
+      // tick but reads never happen and no entries are emitted. Treating
+      // promise payloads as "seen" also primes the baseline so a later
+      // real copy emits on first observation.
+      expect(reads, 0);
+      expect(received, isEmpty);
+
+      hasPromise = false;
+      await Future.delayed(const Duration(milliseconds: 80));
+
+      expect(reads, greaterThanOrEqualTo(1));
+
+      await sub.cancel();
+      await service.dispose();
+    });
+
     test('skips emissions when sensitive flag is set', () async {
       var currentChange = 0;
       var sensitive = true;

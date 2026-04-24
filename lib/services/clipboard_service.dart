@@ -14,15 +14,22 @@ typedef ClipboardEntryReader = Future<ClipboardEntry?> Function();
 
 /// Snapshot returned by the native `currentState` channel: a monotonic
 /// change counter (macOS NSPasteboard.changeCount / Windows
-/// GetClipboardSequenceNumber) and a sensitive-content flag. A missing
+/// GetClipboardSequenceNumber), a sensitive-content flag, and a file-promise
+/// flag used to skip super_clipboard reads that would resolve NSFilePromise
+/// entries (emptying the source app's clipboard in the process). A missing
 /// native handler is expressed as [ClipboardState.unavailable].
 class ClipboardState {
-  const ClipboardState({required this.change, required this.sensitive});
+  const ClipboardState({
+    required this.change,
+    required this.sensitive,
+    this.hasFilePromise = false,
+  });
 
   static const unavailable = ClipboardState(change: -1, sensitive: false);
 
   final int change;
   final bool sensitive;
+  final bool hasFilePromise;
 }
 
 typedef ClipboardStateProbe = Future<ClipboardState> Function();
@@ -234,6 +241,7 @@ class ClipboardService {
       return ClipboardState(
         change: (v['change'] as int?) ?? -1,
         sensitive: (v['sensitive'] as bool?) ?? false,
+        hasFilePromise: (v['hasFilePromise'] as bool?) ?? false,
       );
     } on MissingPluginException {
       return ClipboardState.unavailable;
@@ -277,6 +285,23 @@ class ClipboardService {
       // Dart heap. _lastSignature is intentionally left untouched so the
       // next non-sensitive copy still counts as "new".
       if (state.sensitive) return;
+
+      // Step 2b — file-promise short-circuit. Finder / Android Studio /
+      // Xcode publish selections as NSFilePromise; calling
+      // super_clipboard.read() on them triggers the promise resolution,
+      // which writes placeholder files into our temp dir AND empties the
+      // source app's clipboard so the user's own Cmd+V fails silently
+      // afterward. We check "has any promise type" rather than "is
+      // file-only" — Finder routinely publishes the filename as plain
+      // text alongside the promise, so an allSatisfy check would miss
+      // the common case. We don't surface file entries anyway (see the
+      // comment in _read), so false negatives here cost nothing beyond
+      // the rare rich-copy payload that bundles a promise with raster
+      // bytes — acceptable trade for reliably not breaking Finder.
+      if (state.hasFilePromise) {
+        _primed = true;
+        return;
+      }
 
       // Step 3 — read content.
       final ClipboardEntry? entry;
