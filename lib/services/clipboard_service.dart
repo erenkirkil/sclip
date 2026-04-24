@@ -109,6 +109,17 @@ class ClipboardService {
         final xml = entry.text ?? '';
         if (xml.isEmpty) return;
         final bytes = utf8.encode(xml);
+        // File-handler targets (Telegram, Slack, Mail attachments) don't
+        // recognize the public.svg-image UTI as a paste type — they fall
+        // back to plainText and drop raw XML into the chat. Publishing a
+        // file URI alongside the SVG bytes lets those apps treat it as an
+        // attachment, while apps that DO know the UTI (browsers, Figma)
+        // still pick the inline bytes. plainText stays as the universal
+        // fallback. All three on a single item so target picks one.
+        final fileUri = await _materializeBytesAsFile(entry, bytes, 'svg');
+        if (fileUri != null) {
+          item.add(Formats.fileUri(fileUri));
+        }
         item.add(_svgFormat(bytes));
         item.add(Formats.plainText(xml));
         break;
@@ -163,6 +174,37 @@ class ClipboardService {
     }
     await clipboard.write([item]);
     _lastSignature = entry.contentHash;
+  }
+
+  /// Writes [bytes] to `<tempDir>/sclip/<entryId>/clipboard.<ext>` and
+  /// returns the file URI, or null if the temp dir is unavailable. Used by
+  /// the SVG writeBack path so file-handler targets (Telegram, Slack) can
+  /// pick up a file attachment instead of falling back to inline XML when
+  /// they don't recognize the SVG UTI. Stale files from a prior writeBack
+  /// on the same entry are pruned first to keep the temp dir bounded.
+  Future<Uri?> _materializeBytesAsFile(
+    ClipboardEntry entry,
+    List<int> bytes,
+    String extension,
+  ) async {
+    try {
+      final base = await getTemporaryDirectory();
+      final dir = Directory('${base.path}/sclip/${entry.id}');
+      if (dir.existsSync()) {
+        try {
+          dir.deleteSync(recursive: true);
+        } catch (_) {
+          // ignore — we'll overwrite the file individually below
+        }
+      }
+      dir.createSync(recursive: true);
+      final file = File('${dir.path}/clipboard.$extension');
+      file.writeAsBytesSync(bytes);
+      return file.uri;
+    } catch (e) {
+      debugPrint('sclip: temp materialize failed: $e');
+      return null;
+    }
   }
 
   /// Writes each image in [bytes] to a temp file under
