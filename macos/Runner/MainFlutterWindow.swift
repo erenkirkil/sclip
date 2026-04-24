@@ -78,6 +78,52 @@ class MainFlutterWindow: NSWindow {
         // active after dismissing sclip.
         NSApp.hide(nil)
         result(nil)
+      case "screenLayout":
+        // Returns cursor + every visible display in a single, consistent
+        // top-left flipped coordinate space anchored to the primary
+        // display's frame height. We roll our own because screen_retriever
+        // 0.2.0 flips cursor Y against `min(frame.maxY)` but flips display
+        // Y against `primary.frame.height` — the two don't agree on
+        // multi-monitor layouts where the secondary has a different height
+        // or sits next to the primary, so cursor containment fails.
+        let screens = NSScreen.screens
+        guard let primary = screens.first else {
+          result(["cursor": ["dx": 0.0, "dy": 0.0], "displays": []])
+          return
+        }
+        let primaryHeight = primary.frame.height
+        let mouse = NSEvent.mouseLocation
+        let displays: [NSDictionary] = screens.map { s in
+          let vf = s.visibleFrame
+          let f = s.frame
+          // `visible` excludes the menu bar / dock — use for window
+          // clamping so sclip never slides under them. `full` includes
+          // the menu bar — used for cursor containment because tray
+          // icons live ON the menu bar, and otherwise a tray click
+          // lands cursor.y "above" every visible rect and we
+          // misattribute the display.
+          let visibleTopLeftY = primaryHeight - vf.origin.y - vf.height
+          let fullTopLeftY = primaryHeight - f.origin.y - f.height
+          let screenID = (s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) ?? 0
+          return [
+            "id": "\(screenID)",
+            "x": vf.origin.x,
+            "y": visibleTopLeftY,
+            "width": vf.width,
+            "height": vf.height,
+            "fullX": f.origin.x,
+            "fullY": fullTopLeftY,
+            "fullWidth": f.width,
+            "fullHeight": f.height,
+          ] as NSDictionary
+        }
+        result([
+          "cursor": [
+            "dx": mouse.x,
+            "dy": primaryHeight - mouse.y,
+          ],
+          "displays": displays,
+        ])
       case "pasteToPrevious":
         // Hide sclip so the previously active app regains focus, then post
         // Cmd+V into it. Requires Accessibility permission (System Settings →

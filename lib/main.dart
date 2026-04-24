@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,10 +10,13 @@ import 'package:window_manager/window_manager.dart';
 
 import 'models/clipboard_entry.dart';
 import 'providers/history_provider.dart';
+import 'providers/settings_provider.dart';
 import 'services/clipboard_service.dart';
 import 'services/hotkey_service.dart';
+import 'services/settings_service.dart';
 import 'services/tray_service.dart';
 import 'ui/history_list.dart';
+import 'ui/settings_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +29,12 @@ Future<void> main() async {
     if (details.stack != null) debugPrint('${details.stack}');
     prevOnError?.call(details);
   };
+
+  // Load persisted user preferences (theme, hotkey, toggles) before the
+  // first frame so the app opens in the user's configured state — no
+  // theme flash, no wrong hotkey briefly registered.
+  final settingsService = await SettingsService.load();
+  final settings = SettingsProvider(settingsService);
 
   await windowManager.ensureInitialized();
 
@@ -45,38 +55,54 @@ Future<void> main() async {
     await windowManager.focus();
   });
 
-  runApp(const SclipApp());
+  runApp(SclipApp(settings: settings));
 }
 
 class SclipApp extends StatelessWidget {
-  const SclipApp({super.key});
+  SclipApp({super.key, required this.settings});
+
+  final SettingsProvider settings;
+
+  /// Exposed so the global Escape handler can pop any open modal before
+  /// falling through to the window-hide behaviour. Using a key rather than
+  /// context lookups keeps the handler decoupled from widget-tree state.
+  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'sclip',
-      debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.system,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
-
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.indigo,
-          brightness: Brightness.dark,
+    return ListenableBuilder(
+      listenable: settings,
+      builder: (context, _) => MaterialApp(
+        title: 'sclip',
+        debugShowCheckedModeBanner: false,
+        navigatorKey: navigatorKey,
+        themeMode: settings.themeMode,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+          useMaterial3: true,
         ),
-        useMaterial3: true,
+        darkTheme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.indigo,
+            brightness: Brightness.dark,
+          ),
+          useMaterial3: true,
+        ),
+        home: HomePage(settings: settings, navigatorKey: navigatorKey),
       ),
-      home: const HomePage(),
-
     );
   }
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({
+    super.key,
+    required this.settings,
+    required this.navigatorKey,
+  });
+
+  final SettingsProvider settings;
+  final GlobalKey<NavigatorState> navigatorKey;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -85,8 +111,9 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WindowListener {
   static const _windowChannel = MethodChannel('sclip/window');
   static const _clipboardChannel = MethodChannel('sclip/clipboard');
-  final ClipboardService _service = ClipboardService();
-  final HistoryProvider _history = HistoryProvider();
+
+  late final ClipboardService _service;
+  late final HistoryProvider _history;
   late final TrayService _tray;
   late final HotkeyService _hotkey;
   final FocusNode _firstItemFocus = FocusNode(debugLabel: 'sclip-first-item');
@@ -98,31 +125,69 @@ class _HomePageState extends State<HomePage> with WindowListener {
   bool _accessibilityOk = !Platform.isMacOS;
 
   /// When true, window stays on top and does not auto-hide on focus loss.
-  /// Toggled from the tray menu.
-  bool _pinned = false;
+  /// Initial value mirrors the user's `alwaysOnTopDefault` preference but
+  /// can be toggled at runtime from the tray without rewriting the pref.
+  late bool _pinned;
 
   /// True while we're programmatically hiding the window, so our own
   /// show→hide bounce doesn't fire the blur-auto-hide path.
   bool _suppressBlur = false;
+
+  /// Guards the pin sync loop: tray toggle writes to settings → settings
+  /// listener would otherwise call setAlwaysOnTop again. Settings-driven
+  /// flips skip the redundant call when this is true.
+  bool _suppressSettingsPinSync = false;
+
+  /// Tracks whether the Settings modal is currently on-screen. Tray /
+  /// shortcut re-entries while it's open would otherwise stack multiple
+  /// dialogs on top of each other, forcing the user to Esc repeatedly to
+  /// unwind the pile.
+  bool _settingsOpen = false;
 
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
 
+    _pinned = widget.settings.alwaysOnTopDefault;
+    _history = HistoryProvider(maxItems: widget.settings.maxItems);
+    _service = ClipboardService(
+      interval: widget.settings.pollingInterval,
+      sensitiveFilterEnabled: widget.settings.sensitiveFilterEnabled,
+    );
+
+    widget.settings.addListener(_onSettingsChanged);
+
     _sub = _service.entries.listen(_history.add);
     _service.start();
+
+    // Honour clearOnStartup before the first tick lands anything — the
+    // service hasn't produced entries yet, but a user who toggles this on
+    // expects a blank list at launch even if a prior session left entries
+    // in the (now-gone) heap of a previous process. The clear() is
+    // effectively a no-op today; we keep it explicit so the intent is
+    // preserved when session-restore lands in a future sprint.
+    if (widget.settings.clearOnStartup) {
+      _history.clear();
+    }
+
+    // Apply alwaysOnTopDefault to the window itself on launch.
+    if (_pinned) {
+      unawaited(windowManager.setAlwaysOnTop(true));
+    }
 
     _tray = TrayService(
       onToggleWindow: _toggleWindow,
       onClearAll: () async => _history.clear(),
       onTogglePin: _togglePin,
+      onOpenSettings: _openSettings,
       onQuit: _quit,
     );
     _hotkey = HotkeyService(onToggleWindow: _toggleWindow);
 
     _tray.init();
-    _hotkey.init();
+    // Pass the persisted hotkey through so restart survives user config.
+    _hotkey.init(preferred: widget.settings.toggleHotkey);
     _checkAccessibility();
 
     // Global Esc handler. CallbackShortcuts in the widget tree requires a
@@ -132,9 +197,40 @@ class _HomePageState extends State<HomePage> with WindowListener {
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
   }
 
+  void _onSettingsChanged() {
+    final s = widget.settings;
+    // Propagate the observable knobs to services. These setters all
+    // short-circuit when the value hasn't changed, so calling them
+    // unconditionally is cheap.
+    _history.maxItems = s.maxItems;
+    _service.interval = s.pollingInterval;
+    _service.sensitiveFilterEnabled = s.sensitiveFilterEnabled;
+
+    // Always-on-top is dual-purpose: the pref stores the boot default, but
+    // flipping it from the settings page should *also* apply to the live
+    // window so the user sees the effect immediately. Tray toggle and this
+    // path stay consistent by routing through _pinned + tray sync.
+    if (!_suppressSettingsPinSync && _pinned != s.alwaysOnTopDefault) {
+      _pinned = s.alwaysOnTopDefault;
+      unawaited(windowManager.setAlwaysOnTop(_pinned));
+      unawaited(_tray.setPinned(_pinned));
+      if (mounted) setState(() {});
+    }
+  }
+
   bool _onHardwareKey(KeyEvent event) {
     if (event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.escape) {
+      // If any modal/dialog is on top, pop it first — a single Esc should
+      // close the settings sheet without also hiding the window, otherwise
+      // the user loses their place and the window disappears as a side
+      // effect. A second Esc (no poppable route) falls through to the
+      // normal hide behaviour.
+      final nav = widget.navigatorKey.currentState;
+      if (nav != null && nav.canPop()) {
+        nav.pop();
+        return true;
+      }
       unawaited(_hideAndReturnFocus());
       return true;
     }
@@ -159,6 +255,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     windowManager.removeListener(this);
+    widget.settings.removeListener(_onSettingsChanged);
     _sub?.cancel();
     _service.dispose();
     _history.dispose();
@@ -229,31 +326,269 @@ class _HomePageState extends State<HomePage> with WindowListener {
     setState(() => _pinned = next);
     await windowManager.setAlwaysOnTop(next);
     await _tray.setPinned(next);
+    // Keep settings + tray in sync: flipping pin from the tray should also
+    // update the persisted pref so the Settings dialog reflects reality and
+    // the next launch honours the user's latest choice. The provider
+    // no-ops when the value hasn't changed, so calling unconditionally is
+    // cheap. Mark a guard so our own settings listener doesn't race us
+    // back through setAlwaysOnTop / setPinned.
+    _suppressSettingsPinSync = true;
+    try {
+      await widget.settings.setAlwaysOnTopDefault(next);
+    } finally {
+      _suppressSettingsPinSync = false;
+    }
+  }
+
+  /// Preferred settings window size on a roomy display — we cap at this
+  /// and shrink via [_settingsSizeFor] when the host display is smaller
+  /// (e.g. MacBook Air as a secondary monitor). Kept deliberately tight
+  /// to preserve sclip's minimalist feel; the Settings surface fits
+  /// comfortably in 440×560 with the current sections.
+  static const _settingsPreferredSize = Size(440, 560);
+  static const _defaultWindowSize = Size(340, 460);
+  static const _defaultMinSize = Size(300, 360);
+
+  Future<void> _openSettings() async {
+    // Re-entry while the modal is already on screen would stack another
+    // copy on top — Tray clicks don't know the app's UI state. Just bring
+    // focus back and bail.
+    if (_settingsOpen) {
+      await windowManager.show();
+      await windowManager.focus();
+      return;
+    }
+    // Settings is shown from a hotkey/tray click, so the window might not
+    // currently be visible. Surface it first so the modal has a frame.
+    final visible = await windowManager.isVisible();
+    if (!visible) {
+      await windowManager.show();
+      await windowManager.focus();
+    }
+    if (!mounted) return;
+
+    // Snapshot the current window size/position before resizing so the
+    // user's own manual layout isn't clobbered when we shrink back down.
+    final previousSize = await windowManager.getSize();
+    final previousPosition = await windowManager.getPosition();
+
+    // Size the settings window to fit the display it currently lives on.
+    // We look up the display by the window's current position (not the
+    // cursor) — Settings is typically opened from the tiny top-right
+    // tray anchor while the cursor sits elsewhere; moving to the cursor
+    // would feel like a teleport. When we can't determine the display,
+    // fall back to the preferred size and hope for the best.
+    final layout = await _queryScreenLayout();
+    final bounds = layout == null
+        ? null
+        : _displayContaining(previousPosition, layout.displays);
+    final settingsSize = bounds == null
+        ? _settingsPreferredSize
+        : _settingsSizeFor(bounds);
+    final settingsMinSize = Size(
+      math.min(_settingsPreferredSize.width, settingsSize.width),
+      math.min(_settingsPreferredSize.height, settingsSize.height),
+    );
+
+    // Raise the minimum first so the OS can't immediately clamp the
+    // new size down; then grow the window to its settings size.
+    await windowManager.setMinimumSize(settingsMinSize);
+    await windowManager.setSize(settingsSize);
+    // Preserve the user's anchor: if they opened sclip via the tray (top-
+    // right corner) and clicked Settings, the window should still hug the
+    // top-right after growing — not jump to the centre of the display.
+    // Clamping nudges only as much as needed to keep the bigger size
+    // inside the visible bounds.
+    if (bounds != null) {
+      final clamped = _clampInto(previousPosition, settingsSize, bounds);
+      if (clamped != previousPosition) {
+        await windowManager.setPosition(clamped);
+      }
+    }
+    if (!mounted) return;
+
+    _settingsOpen = true;
+    try {
+      await SettingsPage.show(
+        context,
+        settings: widget.settings,
+        onHotkeyChange: (hk) async {
+          final ok = await _hotkey.reregister(hk);
+          if (ok) {
+            await widget.settings.setToggleHotkey(hk);
+          }
+          return ok;
+        },
+      );
+    } finally {
+      _settingsOpen = false;
+      // Restore the minimal footprint. If the user manually resized the
+      // window to something larger than the default but smaller than the
+      // settings size, we treat that as intent to keep it — shrink only
+      // when the window is still at the size we just grew it to.
+      await windowManager.setMinimumSize(_defaultMinSize);
+      final sizeNow = await windowManager.getSize();
+      if (sizeNow == settingsSize) {
+        final restoreSize =
+            previousSize == settingsSize ? _defaultWindowSize : previousSize;
+        await windowManager.setSize(restoreSize);
+        // Position restore is deliberately conditional on "nothing else
+        // moved us in the meantime". If the user cycled hide/show (e.g.
+        // hid with the hotkey, re-opened via tray on another display)
+        // between opening and closing settings, the current position is
+        // their latest intent — teleporting back to the A-position we
+        // captured at open time would feel like a screen jump. We detect
+        // the no-move case via the same clamped position we set on open.
+        final currentPosition = await windowManager.getPosition();
+        final expectedOpenPosition =
+            bounds == null ? previousPosition : _clampInto(
+                previousPosition, settingsSize, bounds);
+        final unmoved = (currentPosition - expectedOpenPosition)
+                .distanceSquared <
+            1.0;
+        if (unmoved) {
+          await windowManager.setPosition(previousPosition);
+        }
+      }
+    }
+  }
+
+  /// Snapshot of the desktop: cursor position plus every display's
+  /// visible rectangle, all in a single top-left flipped coordinate
+  /// space. Queried from our own native channel because
+  /// `screen_retriever` 0.2.0 normalises cursor Y against
+  /// `min(frame.maxY)` but display Y against `primary.frame.height` —
+  /// the two anchors diverge on multi-monitor layouts where the
+  /// secondary is taller or sits side-by-side, so cursor-in-display
+  /// containment silently fails. Falling back to `screen_retriever`
+  /// when the channel isn't available keeps tests + non-desktop hosts
+  /// working.
+  Future<({
+    Offset cursor,
+    List<({Rect visible, Rect full})> displays,
+  })?> _queryScreenLayout() async {
+    try {
+      final layout =
+          await _windowChannel.invokeMapMethod<String, dynamic>('screenLayout');
+      if (layout != null) {
+        final cursorMap = (layout['cursor'] as Map).cast<String, dynamic>();
+        final cursor = Offset(
+          (cursorMap['dx'] as num).toDouble(),
+          (cursorMap['dy'] as num).toDouble(),
+        );
+        final raw = (layout['displays'] as List).cast<Map>();
+        final displays = [
+          for (final d in raw)
+            (
+              visible: Rect.fromLTWH(
+                (d['x'] as num).toDouble(),
+                (d['y'] as num).toDouble(),
+                (d['width'] as num).toDouble(),
+                (d['height'] as num).toDouble(),
+              ),
+              full: Rect.fromLTWH(
+                (d['fullX'] as num? ?? d['x'] as num).toDouble(),
+                (d['fullY'] as num? ?? d['y'] as num).toDouble(),
+                (d['fullWidth'] as num? ?? d['width'] as num).toDouble(),
+                (d['fullHeight'] as num? ?? d['height'] as num).toDouble(),
+              ),
+            ),
+        ];
+        return (cursor: cursor, displays: displays);
+      }
+    } on MissingPluginException {
+      // Fall through to screen_retriever below.
+    } catch (e) {
+      debugPrint('sclip: screenLayout channel failed: $e');
+    }
+    try {
+      final cursor = await screenRetriever.getCursorScreenPoint();
+      final ds = await screenRetriever.getAllDisplays();
+      final displays = [
+        for (final d in ds)
+          (() {
+            final visible = (d.visiblePosition ?? Offset.zero) &
+                (d.visibleSize ??
+                    Size(
+                      d.size.width / (d.scaleFactor ?? 1.0).toDouble(),
+                      d.size.height / (d.scaleFactor ?? 1.0).toDouble(),
+                    ));
+            return (visible: visible, full: visible);
+          })(),
+      ];
+      return (cursor: cursor, displays: displays);
+    } catch (e) {
+      debugPrint('sclip: screen_retriever fallback failed: $e');
+      return null;
+    }
+  }
+
+  /// The visible rectangle of whichever display owns [point]. Cursor
+  /// containment uses each display's *full* frame (including menu bar /
+  /// taskbar) so a tray-icon click — which by definition lands on the
+  /// menu bar — still resolves to the right display. The returned rect
+  /// is the *visible* frame, since callers clamp the window into it and
+  /// never want sclip sliding under the menu bar. Falls back to the
+  /// primary (first) display when nothing contains the point.
+  Rect? _displayContaining(
+    Offset point,
+    List<({Rect visible, Rect full})> displays,
+  ) {
+    if (displays.isEmpty) return null;
+    for (final d in displays) {
+      if (d.full.contains(point)) return d.visible;
+    }
+    return displays.first.visible;
+  }
+
+  /// Window size used while the settings modal is open, adapted to the
+  /// display it will live on. We cap at the preferred 520×600 for
+  /// comfort on big monitors, but shrink to ~80% of the display's
+  /// visible area on small screens so the modal never dominates — a
+  /// MacBook Air is cramped enough already without sclip eating most of
+  /// the screen.
+  Size _settingsSizeFor(Rect bounds) {
+    final w = math.min(
+      _settingsPreferredSize.width,
+      math.max(380.0, bounds.width * 0.7),
+    );
+    final h = math.min(
+      _settingsPreferredSize.height,
+      math.max(440.0, bounds.height * 0.7),
+    );
+    return Size(w, h);
+  }
+
+  /// Shift [position] just enough so that a [size]-sized window sits
+  /// fully inside [bounds] with an 8-px margin. Preserves the user's
+  /// anchor (top-right from tray stays top-right, centred stays centred)
+  /// instead of jumping back to centre on every resize.
+  Offset _clampInto(Offset position, Size size, Rect bounds) {
+    final minX = bounds.left + 8;
+    final minY = bounds.top + 8;
+    final maxX = bounds.right - size.width - 8;
+    final maxY = bounds.bottom - size.height - 8;
+    return Offset(
+      position.dx.clamp(minX, math.max(minX, maxX)),
+      position.dy.clamp(minY, math.max(minY, maxY)),
+    );
   }
 
   Future<void> _positionNearCursor() async {
     try {
-      final cursor = await screenRetriever.getCursorScreenPoint();
-      final display = await screenRetriever.getPrimaryDisplay();
+      final layout = await _queryScreenLayout();
+      if (layout == null) return;
+      final bounds = _displayContaining(layout.cursor, layout.displays);
+      if (bounds == null) return;
       final size = await windowManager.getSize();
-      final screenSize = display.size;
-      final visible = display.visiblePosition ?? Offset.zero;
-      final scale = display.scaleFactor ?? 1.0;
 
-      // Align top-right of window slightly below-left of cursor so it doesn't
-      // cover the click point, and keep it clamped to the visible screen.
-      var x = cursor.dx - size.width / 2;
-      var y = cursor.dy + 12;
-
-      final minX = visible.dx + 8;
-      final minY = visible.dy + 8;
-      final maxX = visible.dx + screenSize.width / scale - size.width - 8;
-      final maxY = visible.dy + screenSize.height / scale - size.height - 8;
-
-      x = x.clamp(minX, maxX);
-      y = y.clamp(minY, maxY);
-
-      await windowManager.setPosition(Offset(x, y));
+      // Align top-center of window slightly below cursor so it doesn't
+      // cover the click point, clamped to the visible screen.
+      final desired = Offset(
+        layout.cursor.dx - size.width / 2,
+        layout.cursor.dy + 12,
+      );
+      await windowManager.setPosition(_clampInto(desired, size, bounds));
     } catch (e) {
       // Fall back to current position on any platform hiccup (e.g. cursor
       // on a disconnected monitor, permission races on first launch).
@@ -362,10 +697,11 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   @override
   void onWindowBlur() {
-    // Auto-hide when user clicks away — unless the user has explicitly
-    // pinned the window. _suppressBlur guards against our own hide path,
-    // which also fires blur on macOS.
-    if (_pinned || _suppressBlur) return;
+    // Auto-hide when user clicks away — unless the user has pinned the
+    // window or turned the behaviour off entirely in settings.
+    // _suppressBlur guards against our own hide path, which also fires
+    // blur on macOS.
+    if (_pinned || _suppressBlur || !widget.settings.autoHideOnBlur) return;
     unawaited(_hideAndReturnFocus());
   }
 
@@ -382,77 +718,104 @@ class _HomePageState extends State<HomePage> with WindowListener {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 40,
-        titleSpacing: 8,
-        title: const Text('sclip', style: TextStyle(fontSize: 14)),
-        centerTitle: true,
-        actions: [
-          ListenableBuilder(
-            listenable: _history,
-            builder: (context, _) => IconButton(
-              tooltip: 'Hepsini sil',
-              icon: const Icon(Icons.delete_sweep_outlined),
-              onPressed: _history.isEmpty
-                  ? null
-                  : () => _confirmClearAll(context),
-            ),
+    return Shortcuts(
+      shortcuts: <ShortcutActivator, Intent>{
+        const SingleActivator(LogicalKeyboardKey.comma, meta: true):
+            const _OpenSettingsIntent(),
+        const SingleActivator(LogicalKeyboardKey.comma, control: true):
+            const _OpenSettingsIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _OpenSettingsIntent: CallbackAction<_OpenSettingsIntent>(
+            onInvoke: (_) {
+              unawaited(_openSettings());
+              return null;
+            },
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (!_accessibilityOk)
-            Material(
-              color: scheme.errorContainer,
-              child: InkWell(
-                onTap: _openAccessibilitySettings,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.lock_outline,
-                        size: 16,
-                        color: scheme.onErrorContainer,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Otomatik yapıştırma için Accessibility izni gerek.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: scheme.onErrorContainer,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        'Ayarları aç',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: scheme.onErrorContainer,
-                        ),
-                      ),
-                    ],
-                  ),
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            toolbarHeight: 40,
+            titleSpacing: 8,
+            title: const Text('sclip', style: TextStyle(fontSize: 14)),
+            centerTitle: true,
+            actions: [
+              ListenableBuilder(
+                listenable: _history,
+                builder: (context, _) => IconButton(
+                  tooltip: 'Hepsini sil',
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  onPressed: _history.isEmpty
+                      ? null
+                      : () => _confirmClearAll(context),
                 ),
               ),
-            ),
-          Expanded(
-            child: HistoryList(
-              provider: _history,
-              onEntryTap: _onEntryTap,
-              onEntryOpen: _onEntryOpen,
-              firstItemFocusNode: _firstItemFocus,
-            ),
+              IconButton(
+                tooltip: 'Ayarlar',
+                icon: const Icon(Icons.settings_outlined),
+                onPressed: _openSettings,
+              ),
+            ],
           ),
-        ],
+          body: Column(
+            children: [
+              if (!_accessibilityOk)
+                Material(
+                  color: scheme.errorContainer,
+                  child: InkWell(
+                    onTap: _openAccessibilitySettings,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.lock_outline,
+                            size: 16,
+                            color: scheme.onErrorContainer,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Otomatik yapıştırma için Accessibility izni gerek.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: scheme.onErrorContainer,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            'Ayarları aç',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onErrorContainer,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: HistoryList(
+                  provider: _history,
+                  onEntryTap: _onEntryTap,
+                  onEntryOpen: _onEntryOpen,
+                  firstItemFocusNode: _firstItemFocus,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
+}
+
+class _OpenSettingsIntent extends Intent {
+  const _OpenSettingsIntent();
 }

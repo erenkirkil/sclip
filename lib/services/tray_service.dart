@@ -9,12 +9,14 @@ class TrayService with TrayListener {
     required this.onToggleWindow,
     required this.onClearAll,
     required this.onTogglePin,
+    required this.onOpenSettings,
     required this.onQuit,
   });
 
   final TrayCallback onToggleWindow;
   final TrayCallback onClearAll;
   final TrayCallback onTogglePin;
+  final TrayCallback onOpenSettings;
   final TrayCallback onQuit;
 
   static const _iconMac = 'assets/tray/icon.png';
@@ -53,6 +55,8 @@ class TrayService with TrayListener {
       MenuItem.separator(),
       MenuItem(key: 'clear', label: 'Hepsini Sil'),
       MenuItem.separator(),
+      MenuItem(key: 'settings', label: 'Ayarlar…'),
+      MenuItem.separator(),
       MenuItem(key: 'quit', label: 'Çıkış'),
     ]));
   }
@@ -85,6 +89,9 @@ class TrayService with TrayListener {
         break;
       case 'clear':
         onClearAll();
+        break;
+      case 'settings':
+        onOpenSettings();
         break;
       case 'quit':
         onQuit();

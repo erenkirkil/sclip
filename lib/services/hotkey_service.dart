@@ -12,19 +12,25 @@ class HotkeyService {
   final HotkeyCallback onToggleWindow;
 
   HotKey? _registered;
+  HotKey? get registered => _registered;
 
-  Future<void> init() async {
+  Future<void> init({HotKey? preferred}) async {
     if (_registered != null) return;
     // Clean any leftovers from a prior run.
     await hotKeyManager.unregisterAll();
 
-    // Preferred combo per-platform, with a fallback if the OS rejects it
-    // (e.g. another app already grabbed the global shortcut on Windows).
+    // If the user has a saved preference, try it first and bail on success.
+    // Fall through to the built-in attempts on failure (e.g. another app
+    // has grabbed the combo since the pref was saved).
+    if (preferred != null && await _tryRegister(preferred)) return;
+
+    // Built-in attempts: preferred per-platform combo, with fallbacks so
+    // Windows users still get something if Alt+Shift+V is claimed.
     final attempts = Platform.isMacOS
-        ? [
+        ? const [
             [HotKeyModifier.meta, HotKeyModifier.shift],
           ]
-        : [
+        : const [
             [HotKeyModifier.alt, HotKeyModifier.shift],
             [HotKeyModifier.control, HotKeyModifier.alt],
             [HotKeyModifier.control, HotKeyModifier.shift],
@@ -36,19 +42,46 @@ class HotkeyService {
         modifiers: modifiers,
         scope: HotKeyScope.system,
       );
-      try {
-        await hotKeyManager.register(
-          hk,
-          keyDownHandler: (_) => onToggleWindow(),
-        );
-        _registered = hk;
-        debugPrint('sclip: hotkey registered with $modifiers + V');
-        return;
-      } catch (e) {
-        debugPrint('sclip: hotkey registration failed for $modifiers + V: $e');
-      }
+      if (await _tryRegister(hk)) return;
     }
     debugPrint('sclip: no global hotkey could be registered');
+  }
+
+  /// Swaps the active global hotkey. Unregisters the old one, registers
+  /// [next]. Returns true on success — on failure the previous binding is
+  /// left intact so the user isn't stranded without a toggle. The settings
+  /// page uses the return value to surface an error in the UI.
+  Future<bool> reregister(HotKey next) async {
+    final previous = _registered;
+    if (previous != null) {
+      try {
+        await hotKeyManager.unregister(previous);
+      } catch (e) {
+        debugPrint('sclip: unregister previous hotkey failed: $e');
+      }
+      _registered = null;
+    }
+    if (await _tryRegister(next)) return true;
+    // Roll back so the user keeps a working hotkey.
+    if (previous != null) {
+      await _tryRegister(previous);
+    }
+    return false;
+  }
+
+  Future<bool> _tryRegister(HotKey hk) async {
+    try {
+      await hotKeyManager.register(
+        hk,
+        keyDownHandler: (_) => onToggleWindow(),
+      );
+      _registered = hk;
+      debugPrint('sclip: hotkey registered — ${hk.debugName}');
+      return true;
+    } catch (e) {
+      debugPrint('sclip: hotkey register failed for ${hk.debugName}: $e');
+      return false;
+    }
   }
 
   Future<void> dispose() async {

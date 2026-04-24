@@ -99,7 +99,70 @@ bool FlutterWindow::OnCreate() {
       [](const flutter::MethodCall<flutter::EncodableValue>& call,
          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
              result) {
-        if (call.method_name() == "captureForeground") {
+        if (call.method_name() == "screenLayout") {
+          // Returns cursor + every display's work area in a single top-left
+          // coordinate space (Windows' native convention). Mirrors the
+          // macOS helper so the Dart side can treat both platforms the
+          // same way without relying on screen_retriever's inconsistent
+          // multi-monitor Y normalization.
+          POINT cursor{};
+          GetCursorPos(&cursor);
+          flutter::EncodableList displays;
+          EnumDisplayMonitors(
+              nullptr, nullptr,
+              [](HMONITOR mon, HDC, LPRECT, LPARAM lparam) -> BOOL {
+                auto* list =
+                    reinterpret_cast<flutter::EncodableList*>(lparam);
+                MONITORINFOEXW info{};
+                info.cbSize = sizeof(info);
+                if (GetMonitorInfoW(mon, &info)) {
+                  flutter::EncodableMap m;
+                  m[flutter::EncodableValue("id")] = flutter::EncodableValue(
+                      std::string(reinterpret_cast<const char*>(info.szDevice),
+                                  wcslen(info.szDevice)));
+                  // `rcWork` (work area) excludes the taskbar — used for
+                  // window clamping. `rcMonitor` (full) includes it — used
+                  // for cursor containment so a click on the taskbar tray
+                  // still resolves to the correct monitor.
+                  m[flutter::EncodableValue("x")] = flutter::EncodableValue(
+                      static_cast<double>(info.rcWork.left));
+                  m[flutter::EncodableValue("y")] = flutter::EncodableValue(
+                      static_cast<double>(info.rcWork.top));
+                  m[flutter::EncodableValue("width")] =
+                      flutter::EncodableValue(static_cast<double>(
+                          info.rcWork.right - info.rcWork.left));
+                  m[flutter::EncodableValue("height")] =
+                      flutter::EncodableValue(static_cast<double>(
+                          info.rcWork.bottom - info.rcWork.top));
+                  m[flutter::EncodableValue("fullX")] =
+                      flutter::EncodableValue(static_cast<double>(
+                          info.rcMonitor.left));
+                  m[flutter::EncodableValue("fullY")] =
+                      flutter::EncodableValue(static_cast<double>(
+                          info.rcMonitor.top));
+                  m[flutter::EncodableValue("fullWidth")] =
+                      flutter::EncodableValue(static_cast<double>(
+                          info.rcMonitor.right - info.rcMonitor.left));
+                  m[flutter::EncodableValue("fullHeight")] =
+                      flutter::EncodableValue(static_cast<double>(
+                          info.rcMonitor.bottom - info.rcMonitor.top));
+                  list->push_back(flutter::EncodableValue(m));
+                }
+                return TRUE;
+              },
+              reinterpret_cast<LPARAM>(&displays));
+          flutter::EncodableMap cursorMap;
+          cursorMap[flutter::EncodableValue("dx")] =
+              flutter::EncodableValue(static_cast<double>(cursor.x));
+          cursorMap[flutter::EncodableValue("dy")] =
+              flutter::EncodableValue(static_cast<double>(cursor.y));
+          flutter::EncodableMap out;
+          out[flutter::EncodableValue("cursor")] =
+              flutter::EncodableValue(cursorMap);
+          out[flutter::EncodableValue("displays")] =
+              flutter::EncodableValue(displays);
+          result->Success(flutter::EncodableValue(out));
+        } else if (call.method_name() == "captureForeground") {
           // Called by the Dart side right before it shows sclip, so we
           // remember where the user actually was. If the capture fails
           // (nullptr) the paste handler falls back to the timing-based

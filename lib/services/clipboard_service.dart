@@ -37,6 +37,7 @@ typedef ClipboardStateProbe = Future<ClipboardState> Function();
 class ClipboardService {
   ClipboardService({
     Duration interval = const Duration(milliseconds: 500),
+    this.sensitiveFilterEnabled = true,
     ClipboardReaderFactory? readerFactory,
     ClipboardEntryReader? entryReader,
     ClipboardStateProbe? stateProbe,
@@ -47,7 +48,25 @@ class ClipboardService {
 
   static const _metaChannel = MethodChannel('sclip/clipboard');
 
-  final Duration _interval;
+  Duration _interval;
+  Duration get interval => _interval;
+
+  /// Re-arms the periodic timer with a new cadence. No-op while stopped —
+  /// the next [start] will honour the new value. Called from the settings
+  /// page when the user switches polling rate.
+  set interval(Duration value) {
+    if (value == _interval) return;
+    _interval = value;
+    if (_timer != null) {
+      _timer!.cancel();
+      _timer = Timer.periodic(_interval, (_) => _tick());
+    }
+  }
+
+  /// Flipped at runtime from the settings page. When false, concealed-type
+  /// payloads (password managers) still enter history; the risk is on the
+  /// user at that point.
+  bool sensitiveFilterEnabled;
   final ClipboardReaderFactory _readerFactory;
   final ClipboardEntryReader? _entryReaderOverride;
   final ClipboardStateProbe _stateProbe;
@@ -283,8 +302,9 @@ class ClipboardService {
       // Step 2 — sensitive check. Password-manager payloads advertise a
       // concealed type; skip the read entirely so secrets never enter the
       // Dart heap. _lastSignature is intentionally left untouched so the
-      // next non-sensitive copy still counts as "new".
-      if (state.sensitive) return;
+      // next non-sensitive copy still counts as "new". The filter can be
+      // disabled from settings for users who knowingly accept the risk.
+      if (state.sensitive && sensitiveFilterEnabled) return;
 
       // Step 2b — file-promise short-circuit. Finder / Android Studio /
       // Xcode publish selections as NSFilePromise; calling

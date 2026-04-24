@@ -4,14 +4,27 @@ import '../models/clipboard_entry.dart';
 
 class HistoryProvider extends ChangeNotifier {
   HistoryProvider({
-    this.maxItems = 30,
+    int maxItems = 30,
     this.maxImageBytes = 5 * 1024 * 1024,
     this.maxTotalImageBytes = 150 * 1024 * 1024,
-  });
+  }) : _maxItems = maxItems;
 
   /// Default kept conservative — clipboard managers balloon RAM quickly
   /// when users copy screenshots. 30 is comfortable for daily use.
-  final int maxItems;
+  int _maxItems;
+  int get maxItems => _maxItems;
+
+  /// Mutable at runtime so the settings page can lower the cap on the fly.
+  /// Dropping below current length truncates the tail immediately; raising
+  /// the cap is a no-op until new entries arrive.
+  set maxItems(int value) {
+    if (value <= 0 || value == _maxItems) return;
+    _maxItems = value;
+    if (_entries.length > _maxItems) {
+      _entries.removeRange(_maxItems, _entries.length);
+      notifyListeners();
+    }
+  }
 
   /// Per-entry image byte cap. Anything larger is dropped on ingest so a
   /// single oversized paste can't push the process into hundreds of MB.
@@ -100,8 +113,8 @@ class HistoryProvider extends ChangeNotifier {
       _entries.removeAt(existingIndex);
     }
     _entries.insert(0, entry);
-    if (_entries.length > maxItems) {
-      _entries.removeRange(maxItems, _entries.length);
+    if (_entries.length > _maxItems) {
+      _entries.removeRange(_maxItems, _entries.length);
     }
     notifyListeners();
   }
