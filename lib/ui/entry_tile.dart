@@ -470,6 +470,32 @@ class _Thumbnail extends StatelessWidget {
   }
 }
 
+/// Defense-in-depth render guard for SVG payloads. The ingestion path in
+/// ClipboardService already rejects XXE/XInclude payloads before they
+/// become entries, so this widget should never see malicious XML in
+/// practice. It exists to catch the residual case where flutter_svg
+/// itself throws on malformed-but-benign input (truncated XML, unknown
+/// elements) — without it, one bad SVG in history could take the whole
+/// list view down.
+class _SafeSvg extends StatelessWidget {
+  const _SafeSvg({required this.xml});
+
+  final String xml;
+
+  @override
+  Widget build(BuildContext context) {
+    try {
+      return SvgPicture.string(
+        xml,
+        fit: BoxFit.contain,
+        placeholderBuilder: (_) => const Icon(Icons.image_outlined),
+      );
+    } catch (_) {
+      return const Icon(Icons.broken_image_outlined);
+    }
+  }
+}
+
 class _Leading extends StatelessWidget {
   const _Leading({required this.entry});
 
@@ -500,11 +526,7 @@ class _Leading extends StatelessWidget {
             child: SizedBox(
               width: 48,
               height: 48,
-              child: SvgPicture.string(
-                xml,
-                fit: BoxFit.contain,
-                placeholderBuilder: (_) => const Icon(Icons.image_outlined),
-              ),
+              child: _SafeSvg(xml: xml),
             ),
           );
         }

@@ -342,6 +342,37 @@ class ClipboardService {
     mimeTypes: ['image/svg+xml'],
   );
 
+  /// Hard cap for SVG payloads. Real vector assets from Figma/Illustrator
+  /// routinely run 3-6 MB; 20 MB is comfortably above that while still
+  /// cutting off obviously-malicious oversize payloads cheaply. The primary
+  /// defense against Billion-Laughs-style expansion is the DOCTYPE/ENTITY
+  /// reject below — size alone is not a defense there (a <1 KB file can
+  /// expand to gigabytes).
+  static const _maxSvgBytes = 20 * 1024 * 1024;
+
+  /// Byte-level pre-parse check: reject SVG payloads that contain XXE /
+  /// XInclude constructs before we hand them to flutter_svg. Scans only
+  /// the first 4 KB because DOCTYPE / ENTITY / ATTLIST declarations must
+  /// precede the root element by XML rules, so a malicious payload can't
+  /// hide them deeper in the file. `allowMalformed: true` so non-UTF-8
+  /// garbage decodes to replacement chars instead of throwing — we still
+  /// reject it on content grounds downstream.
+  @visibleForTesting
+  static bool isSafeSvgPayload(Uint8List bytes) {
+    if (bytes.length > _maxSvgBytes) return false;
+    final headLen = bytes.length < 4096 ? bytes.length : 4096;
+    final head = utf8.decode(bytes.sublist(0, headLen), allowMalformed: true);
+    if (head.contains('<!DOCTYPE') ||
+        head.contains('<!ENTITY') ||
+        head.contains('<!ATTLIST')) {
+      return false;
+    }
+    if (head.contains('xmlns:xi=') || head.contains('XInclude')) {
+      return false;
+    }
+    return true;
+  }
+
   Future<ClipboardEntry?> _read(ClipboardReader reader) async {
     // Image formats, tried in order. PNG first because macOS screenshots
     // and most screenshot tools emit it; JPEG for photos; GIF/WebP for
@@ -383,7 +414,7 @@ class ClipboardService {
 
     if (reader.canProvide(_svgFormat)) {
       final bytes = await _readBinary(reader, _svgFormat);
-      if (bytes != null && bytes.isNotEmpty) {
+      if (bytes != null && bytes.isNotEmpty && isSafeSvgPayload(bytes)) {
         try {
           return ClipboardEntry.svg(utf8.decode(bytes));
         } catch (_) {
