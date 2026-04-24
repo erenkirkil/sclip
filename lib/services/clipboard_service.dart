@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 
 import '../models/clipboard_entry.dart';
@@ -60,7 +62,12 @@ class ClipboardService {
   bool _ticking = false;
   bool _primed = false;
 
-  Future<void> writeBack(ClipboardEntry entry) async {
+  /// Rewrites the OS clipboard with [entry]'s content. For
+  /// [ClipboardEntryType.imageSet]: when [imageIndex] is null, every image
+  /// in the set is written as its own clipboard item (multi-item payload);
+  /// when provided, only that single image is written so a plain Cmd/Ctrl+V
+  /// into an app that only accepts one item still gets the intended image.
+  Future<void> writeBack(ClipboardEntry entry, {int? imageIndex}) async {
     final clipboard = SystemClipboard.instance;
     if (clipboard == null) return;
     final item = DataWriterItem();
@@ -72,26 +79,141 @@ class ClipboardService {
         if (value.isEmpty) return;
         item.add(Formats.plainText(value));
         break;
+      case ClipboardEntryType.svg:
+        final xml = entry.text ?? '';
+        if (xml.isEmpty) return;
+        final bytes = utf8.encode(xml);
+        item.add(_svgFormat(bytes));
+        item.add(Formats.plainText(xml));
+        break;
       case ClipboardEntryType.image:
         final bytes = entry.imageBytes;
         if (bytes == null || bytes.isEmpty) return;
-        switch (entry.imageFormat) {
-          case ClipboardImageFormat.jpeg:
-            item.add(Formats.jpeg(bytes));
-          case ClipboardImageFormat.gif:
-            item.add(Formats.gif(bytes));
-          case ClipboardImageFormat.webp:
-            item.add(Formats.webp(bytes));
-          case ClipboardImageFormat.png:
-          case null:
-            item.add(Formats.png(bytes));
-        }
+        _addImageToItem(item, bytes, entry.imageFormat);
         break;
+      case ClipboardEntryType.imageSet:
+        final bytes = entry.imagesBytes;
+        final formats = entry.imagesFormats;
+        if (bytes == null || bytes.isEmpty) return;
+        if (imageIndex == null) {
+          // Paste-all: write each image to a temp file and publish as file
+          // URIs. Multi-item image payloads get silently collapsed to the
+          // first item by most target apps (Slack, Discord, Notes all
+          // behave this way under Cmd/Ctrl+V), whereas file URIs are
+          // treated as attachments/files and actually come through as a
+          // set. Users who want a single inline image still have the
+          // per-thumbnail paste path.
+          final items = await _materializeImageSetAsFiles(entry, bytes,
+              formats: formats);
+          if (items.isEmpty) return;
+          await clipboard.write(items);
+          // Written as file URIs now, not raster bytes — the next clipboard
+          // tick will see a different type entirely, so the imageSet
+          // contentHash wouldn't match. Record a file-style signature so
+          // self-ingestion is still suppressed.
+          _lastSignature = 'paste-all:${entry.id}:${entry.contentHash}';
+          return;
+        }
+        final i = imageIndex.clamp(0, bytes.length - 1);
+        final fmt = (formats != null && i < formats.length)
+            ? formats[i]
+            : ClipboardImageFormat.png;
+        _addImageToItem(item, bytes[i], fmt);
+        await clipboard.write([item]);
+        // Track the single-image signature we just wrote so the next tick
+        // doesn't re-ingest it as a brand-new clipboard entry.
+        _lastSignature = ClipboardEntry.image(bytes[i], format: fmt)
+            .contentHash;
+        return;
       case ClipboardEntryType.files:
+        final uris = entry.uris;
+        if (uris == null || uris.isEmpty) return;
+        final items = uris
+            .map((uri) => DataWriterItem()..add(Formats.fileUri(uri)))
+            .toList();
+        await clipboard.write(items);
+        _lastSignature = entry.contentHash;
         return;
     }
     await clipboard.write([item]);
     _lastSignature = entry.contentHash;
+  }
+
+  /// Writes each image in [bytes] to a temp file under
+  /// `<tempDir>/sclip/<entryId>/` and returns one [DataWriterItem] per
+  /// file — each carrying the file URI so target apps see a multi-file
+  /// paste instead of a multi-image pasteboard (which most apps collapse
+  /// to the first item). Files from the previous paste-all for the same
+  /// entry are pruned first so the temp directory doesn't accumulate.
+  Future<List<DataWriterItem>> _materializeImageSetAsFiles(
+    ClipboardEntry entry,
+    List<Uint8List> bytes, {
+    List<ClipboardImageFormat>? formats,
+  }) async {
+    try {
+      final base = await getTemporaryDirectory();
+      final dir = Directory('${base.path}/sclip/${entry.id}');
+      if (dir.existsSync()) {
+        // Drop stale files from a prior paste-all on this same entry to
+        // keep the temp dir bounded — we always overwrite on every call.
+        try {
+          dir.deleteSync(recursive: true);
+        } catch (_) {
+          // ignore — we'll overwrite files individually below
+        }
+      }
+      dir.createSync(recursive: true);
+
+      final items = <DataWriterItem>[];
+      for (var i = 0; i < bytes.length; i++) {
+        final fmt = (formats != null && i < formats.length)
+            ? formats[i]
+            : ClipboardImageFormat.png;
+        final ext = _extensionFor(fmt);
+        // Prefix numerically so target apps that sort by name keep the
+        // original order of the set (1.png before 10.png thanks to padding).
+        final name = '${(i + 1).toString().padLeft(3, '0')}.$ext';
+        final file = File('${dir.path}/$name');
+        file.writeAsBytesSync(bytes[i]);
+        final item = DataWriterItem()..add(Formats.fileUri(file.uri));
+        items.add(item);
+      }
+      return items;
+    } catch (e) {
+      debugPrint('sclip: paste-all temp materialize failed: $e');
+      return const [];
+    }
+  }
+
+  static String _extensionFor(ClipboardImageFormat format) {
+    switch (format) {
+      case ClipboardImageFormat.png:
+        return 'png';
+      case ClipboardImageFormat.jpeg:
+        return 'jpg';
+      case ClipboardImageFormat.gif:
+        return 'gif';
+      case ClipboardImageFormat.webp:
+        return 'webp';
+    }
+  }
+
+  static void _addImageToItem(
+    DataWriterItem item,
+    Uint8List bytes,
+    ClipboardImageFormat? format,
+  ) {
+    switch (format) {
+      case ClipboardImageFormat.jpeg:
+        item.add(Formats.jpeg(bytes));
+      case ClipboardImageFormat.gif:
+        item.add(Formats.gif(bytes));
+      case ClipboardImageFormat.webp:
+        item.add(Formats.webp(bytes));
+      case ClipboardImageFormat.png:
+      case null:
+        item.add(Formats.png(bytes));
+    }
   }
 
   Stream<ClipboardEntry> get entries => _controller.stream;
@@ -199,25 +321,46 @@ class ClipboardService {
     // Image formats, tried in order. PNG first because macOS screenshots
     // and most screenshot tools emit it; JPEG for photos; GIF/WebP for
     // browser "Copy Image" flows.
-    final imageAttempts = [
-      (Formats.png, ClipboardImageFormat.png),
-      (Formats.jpeg, ClipboardImageFormat.jpeg),
-      (Formats.gif, ClipboardImageFormat.gif),
-      (Formats.webp, ClipboardImageFormat.webp),
+    const imageAttempts = [
+      (ClipboardImageFormat.png, 'png'),
+      (ClipboardImageFormat.jpeg, 'jpeg'),
+      (ClipboardImageFormat.gif, 'gif'),
+      (ClipboardImageFormat.webp, 'webp'),
     ];
-    for (final (format, tag) in imageAttempts) {
-      if (!reader.canProvide(format)) continue;
-      final bytes = await _readBinary(reader, format);
-      if (bytes != null && bytes.isNotEmpty) {
-        return ClipboardEntry.image(bytes, format: tag);
+
+    // Multi-image copy (e.g. selecting several images in a design tool)
+    // lands as a ClipboardReader whose `items` list holds one raster per
+    // slot. Fan them in here rather than at the UI layer so the history
+    // stores a single slot — otherwise one copy-of-six would evict
+    // everything else under the 30-item cap.
+    final images = <(Uint8List, ClipboardImageFormat)>[];
+    for (final item in reader.items) {
+      for (final (tag, _) in imageAttempts) {
+        final format = _formatFor(tag);
+        if (!item.canProvide(format)) continue;
+        final bytes = await _readBinary(item, format);
+        if (bytes != null && bytes.isNotEmpty) {
+          images.add((bytes, tag));
+          break;
+        }
       }
+    }
+    if (images.length >= 2) {
+      return ClipboardEntry.imageSet(
+        [for (final (b, _) in images) b],
+        formats: [for (final (_, f) in images) f],
+      );
+    }
+    if (images.length == 1) {
+      final (bytes, tag) = images.first;
+      return ClipboardEntry.image(bytes, format: tag);
     }
 
     if (reader.canProvide(_svgFormat)) {
       final bytes = await _readBinary(reader, _svgFormat);
       if (bytes != null && bytes.isNotEmpty) {
         try {
-          return ClipboardEntry.text(utf8.decode(bytes));
+          return ClipboardEntry.svg(utf8.decode(bytes));
         } catch (_) {
           // Non-UTF-8 payload — skip SVG
         }
@@ -237,16 +380,31 @@ class ClipboardService {
       }
     }
 
-    if (reader.canProvide(Formats.fileUri)) {
-      final uri = await _readValue(reader, Formats.fileUri);
-      if (uri != null) return ClipboardEntry.files([uri]);
-    }
+    // File URIs are intentionally skipped. On macOS apps like Finder and
+    // Android Studio publish files as NSFilePromise, and reading via
+    // super_clipboard's getValue resolves the promise, leaving the original
+    // clipboard empty — a later Cmd+V in the source app then silently fails.
+    // Since we can't reliably re-emit the promise on paste, we leave file
+    // copies to the OS clipboard entirely.
 
     return null;
   }
 
+  static FileFormat _formatFor(ClipboardImageFormat tag) {
+    switch (tag) {
+      case ClipboardImageFormat.png:
+        return Formats.png;
+      case ClipboardImageFormat.jpeg:
+        return Formats.jpeg;
+      case ClipboardImageFormat.gif:
+        return Formats.gif;
+      case ClipboardImageFormat.webp:
+        return Formats.webp;
+    }
+  }
+
   Future<String?> _readText(
-    ClipboardReader reader,
+    DataReader reader,
     ValueFormat<String> format,
   ) {
     final completer = Completer<String?>();
@@ -256,19 +414,8 @@ class ClipboardService {
     return completer.future;
   }
 
-  Future<T?> _readValue<T extends Object>(
-    ClipboardReader reader,
-    ValueFormat<T> format,
-  ) {
-    final completer = Completer<T?>();
-    reader.getValue<T>(format, (value) {
-      if (!completer.isCompleted) completer.complete(value);
-    });
-    return completer.future;
-  }
-
   Future<Uint8List?> _readBinary(
-    ClipboardReader reader,
+    DataReader reader,
     FileFormat format,
   ) {
     final completer = Completer<Uint8List?>();

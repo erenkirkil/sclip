@@ -116,5 +116,72 @@ void main() {
       expect(jpeg.imageFormat, ClipboardImageFormat.jpeg);
       expect(jpeg.preview, startsWith('JPEG'));
     });
+
+    test('imageSet stores bytes and per-image formats', () {
+      final a = Uint8List.fromList(List.filled(1024, 1));
+      final b = Uint8List.fromList(List.filled(2048, 2));
+      final e = ClipboardEntry.imageSet(
+        [a, b],
+        formats: const [
+          ClipboardImageFormat.jpeg,
+          ClipboardImageFormat.png,
+        ],
+      );
+      expect(e.type, ClipboardEntryType.imageSet);
+      expect(e.imagesBytes?.length, 2);
+      expect(e.imagesFormats, [
+        ClipboardImageFormat.jpeg,
+        ClipboardImageFormat.png,
+      ]);
+    });
+
+    test('imageSet preview counts images and sums size', () {
+      final e = ClipboardEntry.imageSet([
+        Uint8List.fromList(List.filled(1024, 1)),
+        Uint8List.fromList(List.filled(2048, 2)),
+        Uint8List.fromList(List.filled(1024, 3)),
+      ]);
+      expect(e.preview, '3 resim · 4KB');
+    });
+
+    test('imageSet contentHash is stable for same contents in same order', () {
+      final a = Uint8List.fromList([1, 2, 3, 4]);
+      final b = Uint8List.fromList([5, 6, 7, 8]);
+      final s1 = ClipboardEntry.imageSet([a, b]);
+      final s2 = ClipboardEntry.imageSet([
+        Uint8List.fromList([1, 2, 3, 4]),
+        Uint8List.fromList([5, 6, 7, 8]),
+      ]);
+      expect(s1.contentHash, s2.contentHash);
+      expect(s1.id, isNot(s2.id));
+    });
+
+    test('imageSet contentHash is order-sensitive', () {
+      final a = Uint8List.fromList([1, 2, 3, 4]);
+      final b = Uint8List.fromList([5, 6, 7, 8]);
+      final s1 = ClipboardEntry.imageSet([a, b]);
+      final s2 = ClipboardEntry.imageSet([b, a]);
+      expect(s1.contentHash, isNot(s2.contentHash));
+    });
+
+    test('imageSet contentHash is distinct from single image', () {
+      final bytes = Uint8List.fromList([1, 2, 3, 4]);
+      final single = ClipboardEntry.image(bytes);
+      final set = ClipboardEntry.imageSet([bytes, bytes]);
+      expect(single.contentHash, isNot(set.contentHash));
+    });
+
+    test('imageSet touched preserves bytes, formats, hash, and id', () async {
+      final a = Uint8List.fromList([1, 2, 3]);
+      final b = Uint8List.fromList([4, 5, 6]);
+      final e = ClipboardEntry.imageSet([a, b]);
+      await Future.delayed(const Duration(milliseconds: 5));
+      final t = e.touched();
+      expect(t.id, e.id);
+      expect(t.contentHash, e.contentHash);
+      expect(t.imagesBytes, e.imagesBytes);
+      expect(t.imagesFormats, e.imagesFormats);
+      expect(t.createdAt.isAfter(e.createdAt), isTrue);
+    });
   });
 }

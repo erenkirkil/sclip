@@ -130,6 +130,42 @@ void main() {
       expect(p.entries.first.id, small.id);
     });
 
+    test('drops imageSet entries whose total bytes exceed maxImageBytes', () {
+      final p = HistoryProvider(maxImageBytes: 100);
+      final fits = ClipboardEntry.imageSet([
+        Uint8List.fromList(List.filled(30, 1)),
+        Uint8List.fromList(List.filled(40, 2)),
+      ]);
+      final overflows = ClipboardEntry.imageSet([
+        Uint8List.fromList(List.filled(60, 1)),
+        Uint8List.fromList(List.filled(60, 2)),
+      ]);
+
+      p.add(fits);
+      p.add(overflows);
+
+      expect(p.length, 1);
+      expect(p.entries.first.id, fits.id);
+    });
+
+    test('imageSet dedup moves same set to head', () {
+      final p = HistoryProvider();
+      final a = Uint8List.fromList([1, 2, 3]);
+      final b = Uint8List.fromList([4, 5, 6]);
+
+      p.add(ClipboardEntry.imageSet([a, b]));
+      p.add(ClipboardEntry.text('other'));
+      // Re-ingesting same set with identical bytes — should dedupe, not
+      // accumulate, mirroring the single-image behavior.
+      p.add(ClipboardEntry.imageSet([
+        Uint8List.fromList([1, 2, 3]),
+        Uint8List.fromList([4, 5, 6]),
+      ]));
+
+      expect(p.length, 2);
+      expect(p.entries.first.type, ClipboardEntryType.imageSet);
+    });
+
     test('hash-based dedup treats rebuilt entries with same content as one', () {
       final p = HistoryProvider();
 

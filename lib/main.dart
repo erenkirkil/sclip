@@ -16,6 +16,16 @@ import 'ui/history_list.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Surface the default red-screen errors to the console so we can diagnose
+  // frames that flash an error widget without leaving a log trail.
+  final prevOnError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    debugPrint('sclip: widget error: ${details.exception}');
+    if (details.stack != null) debugPrint('${details.stack}');
+    prevOnError?.call(details);
+  };
+
   await windowManager.ensureInitialized();
 
   const windowOptions = WindowOptions(
@@ -87,6 +97,14 @@ class _HomePageState extends State<HomePage> with WindowListener {
   /// previous path silently fails, so we surface a one-time banner.
   bool _accessibilityOk = !Platform.isMacOS;
 
+  /// When true, window stays on top and does not auto-hide on focus loss.
+  /// Toggled from the tray menu.
+  bool _pinned = false;
+
+  /// True while we're programmatically hiding the window, so our own
+  /// show→hide bounce doesn't fire the blur-auto-hide path.
+  bool _suppressBlur = false;
+
   @override
   void initState() {
     super.initState();
@@ -98,6 +116,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
     _tray = TrayService(
       onToggleWindow: _toggleWindow,
       onClearAll: () async => _history.clear(),
+      onTogglePin: _togglePin,
       onQuit: _quit,
     );
     _hotkey = HotkeyService(onToggleWindow: _toggleWindow);
@@ -105,6 +124,21 @@ class _HomePageState extends State<HomePage> with WindowListener {
     _tray.init();
     _hotkey.init();
     _checkAccessibility();
+
+    // Global Esc handler. CallbackShortcuts in the widget tree requires a
+    // focused descendant, which isn't reliable when the window is first
+    // shown via a hotkey (focus ownership can land outside the Flutter
+    // engine for a frame). HardwareKeyboard fires regardless of focus.
+    HardwareKeyboard.instance.addHandler(_onHardwareKey);
+  }
+
+  bool _onHardwareKey(KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      unawaited(_hideAndReturnFocus());
+      return true;
+    }
+    return false;
   }
 
   Future<void> _checkAccessibility() async {
@@ -123,6 +157,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     windowManager.removeListener(this);
     _sub?.cancel();
     _service.dispose();
@@ -135,8 +170,10 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   Future<void> _toggleWindow() async {
     final visible = await windowManager.isVisible();
-    final focused = await windowManager.isFocused();
-    if (visible && focused) {
+    // We intentionally ignore isFocused: if the window is on screen at all
+    // (e.g. opened via tray click and now lives in the background), pressing
+    // the hotkey should hide it rather than fight its focus state.
+    if (visible) {
       await _hideAndReturnFocus();
     } else {
       // Remember who currently owns the foreground so the native paste
@@ -171,12 +208,27 @@ class _HomePageState extends State<HomePage> with WindowListener {
   }
 
   Future<void> _hideAndReturnFocus() async {
-    if (Platform.isMacOS) {
-      // Hand focus back to the previously-active app (e.g. Android Studio).
-      await _windowChannel.invokeMethod('hideAndDeactivate');
-    } else {
-      await windowManager.hide();
+    _suppressBlur = true;
+    try {
+      if (Platform.isMacOS) {
+        // Hand focus back to the previously-active app (e.g. Android Studio).
+        await _windowChannel.invokeMethod('hideAndDeactivate');
+      } else {
+        await windowManager.hide();
+      }
+    } finally {
+      // Clear on the next microtask — after onWindowBlur has fired.
+      Future<void>.delayed(const Duration(milliseconds: 50), () {
+        _suppressBlur = false;
+      });
     }
+  }
+
+  Future<void> _togglePin() async {
+    final next = !_pinned;
+    setState(() => _pinned = next);
+    await windowManager.setAlwaysOnTop(next);
+    await _tray.setPinned(next);
   }
 
   Future<void> _positionNearCursor() async {
@@ -249,8 +301,8 @@ class _HomePageState extends State<HomePage> with WindowListener {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  Future<void> _onEntryTap(ClipboardEntry entry) async {
-    await _service.writeBack(entry);
+  Future<void> _onEntryTap(ClipboardEntry entry, {int? imageIndex}) async {
+    await _service.writeBack(entry, imageIndex: imageIndex);
     // Re-using an existing entry should bump it to the top with a fresh
     // timestamp — touch() keeps the id stable so widget keys don't churn
     // and the "just now" label reflects the latest action.
@@ -279,6 +331,42 @@ class _HomePageState extends State<HomePage> with WindowListener {
     if (preventClose) {
       await _hideAndReturnFocus();
     }
+  }
+
+  @override
+  void onWindowFocus() {
+    // Flutter's HardwareKeyboard tracks pressed keys in Dart and can drift
+    // out of sync with the OS while our window is hidden — any key-up that
+    // fires in another app never reaches us, so the next KeyDown trips an
+    // assertion ("A KeyDownEvent is dispatched, but the state shows that
+    // the physical key is already pressed."). Once that assertion throws,
+    // subsequent dispatches are also unreliable, which is why arrow-key
+    // navigation silently dies after the first copy+paste cycle.
+    // syncKeyboardState asks the OS for the real pressed-key set and
+    // reconciles, so the next event frame starts clean.
+    unawaited(HardwareKeyboard.instance.syncKeyboardState());
+
+    // Reassert focus on the top entry — when the window is reshown after a
+    // paste, OS focus sometimes arrives before our postFrameCallback from
+    // _toggleWindow runs (or we were shown via a path that doesn't go
+    // through _toggleWindow, like the system unhiding us). Requesting here
+    // guarantees arrow keys have a primary focus to navigate from.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_firstItemFocus.context != null &&
+          FocusManager.instance.primaryFocus != _firstItemFocus) {
+        _firstItemFocus.requestFocus();
+      }
+    });
+  }
+
+  @override
+  void onWindowBlur() {
+    // Auto-hide when user clicks away — unless the user has explicitly
+    // pinned the window. _suppressBlur guards against our own hide path,
+    // which also fires blur on macOS.
+    if (_pinned || _suppressBlur) return;
+    unawaited(_hideAndReturnFocus());
   }
 
   Future<void> _openAccessibilitySettings() async {

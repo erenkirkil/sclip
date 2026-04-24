@@ -8,17 +8,20 @@ class TrayService with TrayListener {
   TrayService({
     required this.onToggleWindow,
     required this.onClearAll,
+    required this.onTogglePin,
     required this.onQuit,
   });
 
   final TrayCallback onToggleWindow;
   final TrayCallback onClearAll;
+  final TrayCallback onTogglePin;
   final TrayCallback onQuit;
 
   static const _iconMac = 'assets/tray/icon.png';
   static const _iconWin = 'assets/tray/icon.ico';
 
   bool _installed = false;
+  bool _pinned = false;
 
   Future<void> init() async {
     if (_installed) return;
@@ -32,9 +35,21 @@ class TrayService with TrayListener {
     await _rebuildMenu();
   }
 
+  Future<void> setPinned(bool value) async {
+    if (_pinned == value) return;
+    _pinned = value;
+    await _rebuildMenu();
+  }
+
   Future<void> _rebuildMenu() async {
     await trayManager.setContextMenu(Menu(items: [
       MenuItem(key: 'toggle', label: 'Göster / Gizle'),
+      MenuItem.separator(),
+      MenuItem.checkbox(
+        key: 'pin',
+        label: 'Üste sabitle',
+        checked: _pinned,
+      ),
       MenuItem.separator(),
       MenuItem(key: 'clear', label: 'Hepsini Sil'),
       MenuItem.separator(),
@@ -64,6 +79,9 @@ class TrayService with TrayListener {
     switch (menuItem.key) {
       case 'toggle':
         onToggleWindow();
+        break;
+      case 'pin':
+        onTogglePin();
         break;
       case 'clear':
         onClearAll();

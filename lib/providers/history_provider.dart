@@ -36,6 +36,20 @@ class HistoryProvider extends ChangeNotifier {
         return;
       }
     }
+    if (entry.type == ClipboardEntryType.imageSet) {
+      final bytes = entry.imagesBytes;
+      // Total-bytes cap rather than per-image — the concern here is one
+      // paste spiking memory, and a 10-image set is just as risky as a
+      // single 5MB image.
+      final total = bytes?.fold<int>(0, (s, b) => s + b.lengthInBytes) ?? 0;
+      if (bytes == null || bytes.isEmpty || total > maxImageBytes) {
+        debugPrint(
+          'sclip: dropping oversized image-set entry '
+          '($total bytes > $maxImageBytes)',
+        );
+        return;
+      }
+    }
 
     if (_entries.isNotEmpty &&
         _entries.first.contentHash == entry.contentHash) {
