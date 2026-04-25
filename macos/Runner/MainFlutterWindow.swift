@@ -266,11 +266,20 @@ class MainFlutterWindow: NSWindow {
           "displays": displays,
         ])
       case "pasteToPrevious":
-        // Hide sclip so the previously active app regains focus, then post
-        // Cmd+V into it. Requires Accessibility permission (System Settings →
-        // Privacy & Security → Accessibility).
+        // Capture the frontmost app pid *before* we hide sclip. After the
+        // 120 ms settle we verify the same app is still frontmost — if the
+        // user switched windows during the race window we skip injection
+        // rather than pasting into the wrong target.
+        let targetPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
         NSApp.hide(nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+          let currentPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+          guard let expected = targetPid, let actual = currentPid, expected == actual else {
+            // Foreground changed during the race window — abort paste.
+            NSLog("[sclip] pasteToPrevious aborted: foreground pid changed (%@ → %@)",
+                  String(describing: targetPid), String(describing: currentPid))
+            return
+          }
           let src = CGEventSource(stateID: .combinedSessionState)
           let vKey: CGKeyCode = 0x09
           let down = CGEvent(keyboardEventSource: src, virtualKey: vKey, keyDown: true)

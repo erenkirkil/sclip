@@ -367,6 +367,15 @@ bool FlutterWindow::OnCreate() {
               // Short settle time — Windows needs a moment to actually
               // promote the window and update the focused thread queue.
               std::this_thread::sleep_for(std::chrono::milliseconds(60));
+              // Verify the target is still foreground after the settle.
+              // If the user switched to a different window during the race
+              // window, skip injection rather than pasting into the wrong app.
+              HWND actual = GetForegroundWindow();
+              if (actual != target) {
+                OutputDebugStringA(
+                    "[sclip] pasteToPrevious aborted: foreground changed\n");
+                return;
+              }
             } else {
               // Fallback: whatever Windows hands focus to next.
               std::this_thread::sleep_for(std::chrono::milliseconds(120));

@@ -653,7 +653,8 @@ class ClipboardService {
     final head = trimmed.substring(0, headLen).toLowerCase();
     final body = trimmed.toLowerCase();
     final startsWithSvg =
-        head.startsWith('<svg') || head.startsWith('<?xml') && head.contains('<svg');
+        head.startsWith('<svg') ||
+        head.startsWith('<?xml') && head.contains('<svg');
     return startsWithSvg && body.contains('</svg>');
   }
 

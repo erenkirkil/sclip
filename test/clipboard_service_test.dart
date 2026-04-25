@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sclip/models/clipboard_entry.dart';
 import 'package:sclip/services/clipboard_service.dart';
@@ -262,6 +265,62 @@ void main() {
 
       await sub.cancel();
       await service.dispose();
+    });
+  });
+
+  group('SVG sanitizer', () {
+    Uint8List fixture(String name) {
+      final path =
+          '${Directory.current.path}/test/fixtures/malicious_svg/$name';
+      return File(path).readAsBytesSync();
+    }
+
+    test('rejects Billion Laughs (DOCTYPE + ENTITY)', () {
+      expect(
+        ClipboardService.isSafeSvgPayload(fixture('billion_laughs.svg')),
+        isFalse,
+      );
+    });
+
+    test('rejects external entity injection (DOCTYPE + ENTITY SYSTEM)', () {
+      expect(
+        ClipboardService.isSafeSvgPayload(fixture('external_entity.svg')),
+        isFalse,
+      );
+    });
+
+    test('rejects XInclude (xmlns:xi)', () {
+      expect(
+        ClipboardService.isSafeSvgPayload(fixture('xinclude.svg')),
+        isFalse,
+      );
+    });
+
+    test('accepts Figma-like export', () {
+      expect(
+        ClipboardService.isSafeSvgPayload(fixture('figma_like.svg')),
+        isTrue,
+      );
+    });
+
+    test('accepts simple icon SVG', () {
+      expect(
+        ClipboardService.isSafeSvgPayload(fixture('simple_icon.svg')),
+        isTrue,
+      );
+    });
+
+    test('rejects oversized payload (>_maxSvgBytes)', () {
+      // Build a syntactically valid SVG that exceeds the 20MB cap.
+      final padding = 'x' * (21 * 1024 * 1024);
+      final oversized =
+          '<svg xmlns="http://www.w3.org/2000/svg"><!-- $padding --></svg>';
+      expect(
+        ClipboardService.isSafeSvgPayload(
+          Uint8List.fromList(oversized.codeUnits),
+        ),
+        isFalse,
+      );
     });
   });
 }

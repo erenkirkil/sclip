@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "sprint-*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  analyze-and-test:
+    name: Analyze & Test
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --fatal-warnings
+
+      - name: Test
+        run: flutter test
+
+      - name: Check no-network entitlement
+        run: |
+          if grep -q 'com.apple.security.network' macos/Runner/Release.entitlements; then
+            echo "ERROR: network entitlement found in Release.entitlements — offline guarantee broken"
+            exit 1
+          fi
+          echo "Entitlement check: OK"
+
+      - name: Check forbidden patterns
+        run: |
+          if grep -rn 'HttpClient\|dart:io.*Socket' lib/; then
+            echo "ERROR: network-capable code found in lib/"
+            exit 1
+          fi
+          echo "Forbidden pattern check: OK"
