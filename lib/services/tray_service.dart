@@ -44,21 +44,25 @@ class TrayService with TrayListener {
   }
 
   Future<void> _rebuildMenu() async {
-    await trayManager.setContextMenu(Menu(items: [
-      MenuItem(key: 'toggle', label: 'Göster / Gizle'),
-      MenuItem.separator(),
-      MenuItem.checkbox(
-        key: 'pin',
-        label: 'Üste sabitle',
-        checked: _pinned,
+    await trayManager.setContextMenu(
+      Menu(
+        items: [
+          MenuItem(key: 'toggle', label: 'Göster / Gizle'),
+          MenuItem.separator(),
+          MenuItem.checkbox(
+            key: 'pin',
+            label: 'Üste sabitle',
+            checked: _pinned,
+          ),
+          MenuItem.separator(),
+          MenuItem(key: 'clear', label: 'Hepsini Sil'),
+          MenuItem.separator(),
+          MenuItem(key: 'settings', label: 'Ayarlar…'),
+          MenuItem.separator(),
+          MenuItem(key: 'quit', label: 'Çıkış'),
+        ],
       ),
-      MenuItem.separator(),
-      MenuItem(key: 'clear', label: 'Hepsini Sil'),
-      MenuItem.separator(),
-      MenuItem(key: 'settings', label: 'Ayarlar…'),
-      MenuItem.separator(),
-      MenuItem(key: 'quit', label: 'Çıkış'),
-    ]));
+    );
   }
 
   Future<void> dispose() async {

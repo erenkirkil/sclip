@@ -87,9 +87,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final captured = await showDialog<HotKey>(
       context: context,
       barrierDismissible: true,
-      builder: (ctx) => _HotkeyRecorderDialog(
-        initial: widget.settings.toggleHotkey,
-      ),
+      builder: (ctx) =>
+          _HotkeyRecorderDialog(initial: widget.settings.toggleHotkey),
     );
     if (!mounted) return;
     setState(() => _recordingHotkey = false);
@@ -99,19 +98,25 @@ class _SettingsPageState extends State<SettingsPage> {
       // Single-modifier combos (e.g. Cmd+V, Ctrl+C) collide with standard
       // system shortcuts; we require at least two modifiers + a key so the
       // combo is distinctive enough to not steal a common OS binding.
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-          'En az 2 modifier (Cmd/Ctrl/Alt/Shift) + bir tuş gerekli.',
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'En az 2 modifier (Cmd/Ctrl/Alt/Shift) + bir tuş gerekli.',
+          ),
         ),
-      ));
+      );
       return;
     }
     final ok = await widget.onHotkeyChange(captured);
     if (!mounted) return;
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Bu kombinasyon başka bir uygulama tarafından kullanılıyor.'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Bu kombinasyon başka bir uygulama tarafından kullanılıyor.',
+          ),
+        ),
+      );
     }
   }
 
@@ -167,9 +172,9 @@ class _SettingsPageState extends State<SettingsPage> {
             title: const Text('Pano aç/kapa'),
             subtitle: Text(_hotkeyLabel(s.toggleHotkey)),
             trailing: FilledButton.tonalIcon(
-              icon: Icon(_recordingHotkey
-                  ? Icons.fiber_manual_record
-                  : Icons.keyboard),
+              icon: Icon(
+                _recordingHotkey ? Icons.fiber_manual_record : Icons.keyboard,
+              ),
               label: Text(_recordingHotkey ? 'Kaydediliyor…' : 'Değiştir'),
               onPressed: _recordingHotkey ? null : _openHotkeyRecorder,
             ),
@@ -212,9 +217,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ? '1Password/Bitwarden gibi uygulamalardan gelen şifreler yakalanmaz.'
                   : 'Uyarı: hassas içerik geçmişe düşebilir.',
               style: TextStyle(
-                color: s.sensitiveFilterEnabled
-                    ? null
-                    : scheme.error,
+                color: s.sensitiveFilterEnabled ? null : scheme.error,
               ),
             ),
             value: s.sensitiveFilterEnabled,
@@ -311,9 +314,9 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         text.toUpperCase(),
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
-              letterSpacing: 0.8,
-            ),
+          color: Theme.of(context).colorScheme.primary,
+          letterSpacing: 0.8,
+        ),
       ),
     );
   }

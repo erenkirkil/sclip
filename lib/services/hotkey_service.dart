@@ -71,10 +71,7 @@ class HotkeyService {
 
   Future<bool> _tryRegister(HotKey hk) async {
     try {
-      await hotKeyManager.register(
-        hk,
-        keyDownHandler: (_) => onToggleWindow(),
-      );
+      await hotKeyManager.register(hk, keyDownHandler: (_) => onToggleWindow());
       _registered = hk;
       debugPrint('sclip: hotkey registered — ${hk.debugName}');
       return true;

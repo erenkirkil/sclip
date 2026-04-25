@@ -51,14 +51,13 @@ void main() {
       final restored = (await SettingsService.load()).toggleHotkey;
       expect(restored, isNotNull);
       expect(restored!.physicalKey, PhysicalKeyboardKey.keyK);
-      expect(restored.modifiers, containsAll([
-        HotKeyModifier.meta,
-        HotKeyModifier.alt,
-      ]));
+      expect(
+        restored.modifiers,
+        containsAll([HotKeyModifier.meta, HotKeyModifier.alt]),
+      );
     });
 
-    test('resetAll only clears sclip.* keys, preserves foreign keys',
-        () async {
+    test('resetAll only clears sclip.* keys, preserves foreign keys', () async {
       SharedPreferences.setMockInitialValues({
         'other_plugin.something': 'preserve-me',
         'sclip.settings.maxItems': 100,
@@ -87,10 +86,12 @@ void main() {
       await s.setAlwaysOnTopDefault(true);
       await s.setPollingIntervalMs(250);
       await s.setClearOnStartup(true);
-      await s.setToggleHotkey(HotKey(
-        key: PhysicalKeyboardKey.keyV,
-        modifiers: const [HotKeyModifier.meta, HotKeyModifier.shift],
-      ));
+      await s.setToggleHotkey(
+        HotKey(
+          key: PhysicalKeyboardKey.keyV,
+          modifiers: const [HotKeyModifier.meta, HotKeyModifier.shift],
+        ),
+      );
 
       final prefs = await SharedPreferences.getInstance();
       final keys = prefs.getKeys();
@@ -98,8 +99,11 @@ void main() {
       // that persists a ClipboardEntry (even partially) would either show
       // up with a different prefix or with a base64/bytes-shaped value.
       for (final k in keys) {
-        expect(k, startsWith(SettingsService.prefix),
-            reason: 'Unexpected key outside sclip namespace: $k');
+        expect(
+          k,
+          startsWith(SettingsService.prefix),
+          reason: 'Unexpected key outside sclip namespace: $k',
+        );
       }
       // Sanity-check value shapes — no large blobs, no list-of-int, no
       // strings that look like base64 of raster bytes.
@@ -110,8 +114,11 @@ void main() {
           // An image byte payload base64-encoded is routinely >10KB even for
           // tiny PNGs. 4KB is a generous ceiling for a hotkey JSON blob
           // (our biggest scalar value) — anything larger is a red flag.
-          expect(value.length, lessThan(4096),
-              reason: 'Suspiciously large string in prefs for key $k');
+          expect(
+            value.length,
+            lessThan(4096),
+            reason: 'Suspiciously large string in prefs for key $k',
+          );
         }
       }
     });

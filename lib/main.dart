@@ -240,8 +240,9 @@ class _HomePageState extends State<HomePage> with WindowListener {
   Future<void> _checkAccessibility() async {
     if (!Platform.isMacOS) return;
     try {
-      final trusted =
-          await _clipboardChannel.invokeMethod<bool>('isAccessibilityTrusted');
+      final trusted = await _clipboardChannel.invokeMethod<bool>(
+        'isAccessibilityTrusted',
+      );
       if (!mounted) return;
       setState(() => _accessibilityOk = trusted ?? false);
     } on PlatformException catch (e) {
@@ -429,8 +430,9 @@ class _HomePageState extends State<HomePage> with WindowListener {
       await windowManager.setMinimumSize(_defaultMinSize);
       final sizeNow = await windowManager.getSize();
       if (sizeNow == settingsSize) {
-        final restoreSize =
-            previousSize == settingsSize ? _defaultWindowSize : previousSize;
+        final restoreSize = previousSize == settingsSize
+            ? _defaultWindowSize
+            : previousSize;
         await windowManager.setSize(restoreSize);
         // Position restore is deliberately conditional on "nothing else
         // moved us in the meantime". If the user cycled hide/show (e.g.
@@ -440,12 +442,11 @@ class _HomePageState extends State<HomePage> with WindowListener {
         // captured at open time would feel like a screen jump. We detect
         // the no-move case via the same clamped position we set on open.
         final currentPosition = await windowManager.getPosition();
-        final expectedOpenPosition =
-            bounds == null ? previousPosition : _clampInto(
-                previousPosition, settingsSize, bounds);
-        final unmoved = (currentPosition - expectedOpenPosition)
-                .distanceSquared <
-            1.0;
+        final expectedOpenPosition = bounds == null
+            ? previousPosition
+            : _clampInto(previousPosition, settingsSize, bounds);
+        final unmoved =
+            (currentPosition - expectedOpenPosition).distanceSquared < 1.0;
         if (unmoved) {
           await windowManager.setPosition(previousPosition);
         }
@@ -463,13 +464,12 @@ class _HomePageState extends State<HomePage> with WindowListener {
   /// containment silently fails. Falling back to `screen_retriever`
   /// when the channel isn't available keeps tests + non-desktop hosts
   /// working.
-  Future<({
-    Offset cursor,
-    List<({Rect visible, Rect full})> displays,
-  })?> _queryScreenLayout() async {
+  Future<({Offset cursor, List<({Rect visible, Rect full})> displays})?>
+  _queryScreenLayout() async {
     try {
-      final layout =
-          await _windowChannel.invokeMapMethod<String, dynamic>('screenLayout');
+      final layout = await _windowChannel.invokeMapMethod<String, dynamic>(
+        'screenLayout',
+      );
       if (layout != null) {
         final cursorMap = (layout['cursor'] as Map).cast<String, dynamic>();
         final cursor = Offset(
@@ -507,7 +507,8 @@ class _HomePageState extends State<HomePage> with WindowListener {
       final displays = [
         for (final d in ds)
           (() {
-            final visible = (d.visiblePosition ?? Offset.zero) &
+            final visible =
+                (d.visiblePosition ?? Offset.zero) &
                 (d.visibleSize ??
                     Size(
                       d.size.width / (d.scaleFactor ?? 1.0).toDouble(),
@@ -642,11 +643,6 @@ class _HomePageState extends State<HomePage> with WindowListener {
     // timestamp — touch() keeps the id stable so widget keys don't churn
     // and the "just now" label reflects the latest action.
     _history.touch(entry.id);
-    // File entries can't be pasted via Ctrl/Cmd+V reliably; just copy.
-    if (entry.type == ClipboardEntryType.files) {
-      await _hideAndReturnFocus();
-      return;
-    }
     if (Platform.isWindows) {
       // Hide first so focus returns to the previously-active app, then let
       // the native side send Ctrl+V after a short delay.

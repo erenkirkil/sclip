@@ -154,10 +154,11 @@ void main() {
       await service.dispose();
     });
 
-    test('skips reads when hasFilePromise flag is set', () async {
+    test('files dispatch bypasses super_clipboard reader', () async {
       var currentChange = 0;
       var reads = 0;
-      var hasPromise = true;
+      var filesCalls = 0;
+      var hasFiles = true;
       final service = ClipboardService(
         interval: const Duration(milliseconds: 20),
         entryReader: () async {
@@ -167,26 +168,68 @@ void main() {
         stateProbe: () async => ClipboardState(
           change: ++currentChange,
           sensitive: false,
-          hasFilePromise: hasPromise,
+          hasFiles: hasFiles,
         ),
+        filesReader: () async {
+          filesCalls++;
+          return ['/tmp/sclip-test/a.txt', '/tmp/sclip-test/b.txt'];
+        },
       );
 
       final received = <ClipboardEntry>[];
       final sub = service.entries.listen(received.add);
 
       service.start();
-      await Future.delayed(const Duration(milliseconds: 80));
-      // Promise short-circuits the reader entirely — the probe bumps every
-      // tick but reads never happen and no entries are emitted. Treating
-      // promise payloads as "seen" also primes the baseline so a later
-      // real copy emits on first observation.
-      expect(reads, 0);
-      expect(received, isEmpty);
+      // Pre-prime: first hasFiles=true tick is the baseline — no resolve,
+      // no emission. Subsequent ticks call filesReader and emit a files
+      // entry exactly once (dedup catches the unchanged paths).
+      await Future.delayed(const Duration(milliseconds: 120));
+      expect(
+        reads,
+        0,
+        reason: 'super_clipboard must stay untouched while hasFiles is set',
+      );
+      expect(filesCalls, greaterThanOrEqualTo(1));
+      expect(received.length, 1);
+      expect(received.first.type, ClipboardEntryType.files);
+      expect(received.first.uris?.length, 2);
 
-      hasPromise = false;
+      hasFiles = false;
       await Future.delayed(const Duration(milliseconds: 80));
 
       expect(reads, greaterThanOrEqualTo(1));
+
+      await sub.cancel();
+      await service.dispose();
+    });
+
+    test('files dispatch suppresses self-republish via dedup', () async {
+      var currentChange = 0;
+      var filesCalls = 0;
+      final service = ClipboardService(
+        interval: const Duration(milliseconds: 20),
+        entryReader: () async => null,
+        stateProbe: () async => ClipboardState(
+          change: ++currentChange,
+          sensitive: false,
+          hasFiles: true,
+        ),
+        filesReader: () async {
+          filesCalls++;
+          return ['/tmp/sclip-test/x.txt'];
+        },
+      );
+
+      final received = <ClipboardEntry>[];
+      final sub = service.entries.listen(received.add);
+
+      service.start();
+      // changeCount bumps every tick (modelling our macOS post-resolve
+      // republish) but the resolved paths don't change — the contentHash
+      // dedup keeps subsequent ticks silent.
+      await Future.delayed(const Duration(milliseconds: 200));
+      expect(received.length, 1);
+      expect(filesCalls, greaterThan(1));
 
       await sub.cancel();
       await service.dispose();
@@ -198,10 +241,8 @@ void main() {
       final service = ClipboardService(
         interval: const Duration(milliseconds: 20),
         entryReader: () async => ClipboardEntry.text('secret'),
-        stateProbe: () async => ClipboardState(
-          change: ++currentChange,
-          sensitive: sensitive,
-        ),
+        stateProbe: () async =>
+            ClipboardState(change: ++currentChange, sensitive: sensitive),
       );
 
       final received = <ClipboardEntry>[];

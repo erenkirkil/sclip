@@ -119,9 +119,7 @@ void main() {
       final small = ClipboardEntry.image(
         Uint8List.fromList(List.filled(50, 1)),
       );
-      final big = ClipboardEntry.image(
-        Uint8List.fromList(List.filled(200, 1)),
-      );
+      final big = ClipboardEntry.image(Uint8List.fromList(List.filled(200, 1)));
 
       p.add(small);
       p.add(big);
@@ -157,10 +155,12 @@ void main() {
       p.add(ClipboardEntry.text('other'));
       // Re-ingesting same set with identical bytes — should dedupe, not
       // accumulate, mirroring the single-image behavior.
-      p.add(ClipboardEntry.imageSet([
-        Uint8List.fromList([1, 2, 3]),
-        Uint8List.fromList([4, 5, 6]),
-      ]));
+      p.add(
+        ClipboardEntry.imageSet([
+          Uint8List.fromList([1, 2, 3]),
+          Uint8List.fromList([4, 5, 6]),
+        ]),
+      );
 
       expect(p.length, 2);
       expect(p.entries.first.type, ClipboardEntryType.imageSet);
@@ -168,10 +168,7 @@ void main() {
 
     test('evicts oldest image entry when total image bytes exceed cap', () {
       // 250 byte budget; each image is 100 bytes → three would blow the cap.
-      final p = HistoryProvider(
-        maxImageBytes: 1000,
-        maxTotalImageBytes: 250,
-      );
+      final p = HistoryProvider(maxImageBytes: 1000, maxTotalImageBytes: 250);
       final a = ClipboardEntry.image(Uint8List.fromList(List.filled(100, 1)));
       final b = ClipboardEntry.image(Uint8List.fromList(List.filled(100, 2)));
       final c = ClipboardEntry.image(Uint8List.fromList(List.filled(100, 3)));
@@ -192,37 +189,39 @@ void main() {
     });
 
     test('dropping a too-large image leaves existing entries intact', () {
-      final p = HistoryProvider(
-        maxImageBytes: 1000,
-        maxTotalImageBytes: 150,
+      final p = HistoryProvider(maxImageBytes: 1000, maxTotalImageBytes: 150);
+      final small = ClipboardEntry.image(
+        Uint8List.fromList(List.filled(100, 1)),
       );
-      final small =
-          ClipboardEntry.image(Uint8List.fromList(List.filled(100, 1)));
       p.add(small);
 
       // 200 bytes alone exceeds the 150-byte total cap — even after evicting
       // everything, it wouldn't fit. Must be dropped without clearing the
       // existing valid entry.
-      final tooBig =
-          ClipboardEntry.image(Uint8List.fromList(List.filled(200, 2)));
+      final tooBig = ClipboardEntry.image(
+        Uint8List.fromList(List.filled(200, 2)),
+      );
       p.add(tooBig);
 
       expect(p.length, 1);
       expect(p.entries.first.id, small.id);
     });
 
-    test('hash-based dedup treats rebuilt entries with same content as one', () {
-      final p = HistoryProvider();
+    test(
+      'hash-based dedup treats rebuilt entries with same content as one',
+      () {
+        final p = HistoryProvider();
 
-      // Simulates: user copies same text again from outside — clipboard
-      // service produces a fresh entry (new id, new createdAt) but same
-      // contentHash. Should dedupe rather than accumulate.
-      p.add(ClipboardEntry.text('shared'));
-      p.add(ClipboardEntry.text('other'));
-      p.add(ClipboardEntry.text('shared'));
+        // Simulates: user copies same text again from outside — clipboard
+        // service produces a fresh entry (new id, new createdAt) but same
+        // contentHash. Should dedupe rather than accumulate.
+        p.add(ClipboardEntry.text('shared'));
+        p.add(ClipboardEntry.text('other'));
+        p.add(ClipboardEntry.text('shared'));
 
-      expect(p.length, 2);
-      expect(p.entries.first.text, 'shared');
-    });
+        expect(p.length, 2);
+        expect(p.entries.first.text, 'shared');
+      },
+    );
   });
 }

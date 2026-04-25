@@ -122,10 +122,7 @@ void main() {
       final b = Uint8List.fromList(List.filled(2048, 2));
       final e = ClipboardEntry.imageSet(
         [a, b],
-        formats: const [
-          ClipboardImageFormat.jpeg,
-          ClipboardImageFormat.png,
-        ],
+        formats: const [ClipboardImageFormat.jpeg, ClipboardImageFormat.png],
       );
       expect(e.type, ClipboardEntryType.imageSet);
       expect(e.imagesBytes?.length, 2);
@@ -182,6 +179,101 @@ void main() {
       expect(t.imagesBytes, e.imagesBytes);
       expect(t.imagesFormats, e.imagesFormats);
       expect(t.createdAt.isAfter(e.createdAt), isTrue);
+    });
+
+    test('pdf factory stores bytes and renders size preview', () {
+      final bytes = Uint8List.fromList(List.filled(2048, 0xAB));
+      final e = ClipboardEntry.pdf(bytes);
+      expect(e.type, ClipboardEntryType.pdf);
+      expect(e.pdfBytes, bytes);
+      expect(e.preview, startsWith('PDF · '));
+      expect(e.preview, contains('KB'));
+    });
+
+    test('pdf contentHash reflects byte content', () {
+      final a = ClipboardEntry.pdf(Uint8List.fromList([1, 2, 3, 4]));
+      final b = ClipboardEntry.pdf(Uint8List.fromList([1, 2, 3, 4]));
+      final c = ClipboardEntry.pdf(Uint8List.fromList([1, 2, 3, 5]));
+      expect(a.contentHash, b.contentHash);
+      expect(a.contentHash, isNot(c.contentHash));
+    });
+
+    test('pdf touched preserves bytes, hash, and id', () async {
+      final bytes = Uint8List.fromList([9, 8, 7]);
+      final e = ClipboardEntry.pdf(bytes);
+      await Future.delayed(const Duration(milliseconds: 5));
+      final t = e.touched();
+      expect(t.id, e.id);
+      expect(t.contentHash, e.contentHash);
+      expect(t.pdfBytes, e.pdfBytes);
+      expect(t.createdAt.isAfter(e.createdAt), isTrue);
+    });
+
+    test('richText factory stores plain and html side-by-side', () {
+      final e = ClipboardEntry.richText(
+        plainText: 'hello world',
+        html: '<p><b>hello</b> world</p>',
+      );
+      expect(e.type, ClipboardEntryType.richText);
+      expect(e.text, 'hello world');
+      expect(e.richTextHtml, '<p><b>hello</b> world</p>');
+      expect(e.preview, 'hello world');
+    });
+
+    test('richText contentHash differs from plain text with same body', () {
+      final plain = ClipboardEntry.text('hello world');
+      final rich = ClipboardEntry.richText(
+        plainText: 'hello world',
+        html: '<p>hello world</p>',
+      );
+      // Different types must yield different hashes so dedup doesn't
+      // silently swallow a richer copy when a bare-text entry is at the head.
+      expect(rich.contentHash, isNot(plain.contentHash));
+    });
+
+    test('richText contentHash captures html differences', () {
+      final a = ClipboardEntry.richText(plainText: 'same', html: '<p>a</p>');
+      final b = ClipboardEntry.richText(plainText: 'same', html: '<p>b</p>');
+      expect(a.contentHash, isNot(b.contentHash));
+    });
+
+    test('richText touched preserves html and identity', () async {
+      final e = ClipboardEntry.richText(
+        plainText: 'snippet',
+        html: '<i>snippet</i>',
+      );
+      await Future.delayed(const Duration(milliseconds: 5));
+      final t = e.touched();
+      expect(t.id, e.id);
+      expect(t.contentHash, e.contentHash);
+      expect(t.richTextHtml, e.richTextHtml);
+      expect(t.text, e.text);
+      expect(t.createdAt.isAfter(e.createdAt), isTrue);
+    });
+
+    test('files preview shows basename only for single file', () {
+      final e = ClipboardEntry.files([Uri.file('/tmp/sclip/a.png')]);
+      expect(e.preview, 'a.png');
+    });
+
+    test('files preview lists basenames up to three entries', () {
+      final e = ClipboardEntry.files([
+        Uri.file('/tmp/sclip/a.png'),
+        Uri.file('/tmp/sclip/b.pdf'),
+        Uri.file('/tmp/sclip/c.txt'),
+      ]);
+      expect(e.preview, '3 dosya: a.png, b.pdf, c.txt');
+    });
+
+    test('files preview collapses overflow into "+ N daha"', () {
+      final e = ClipboardEntry.files([
+        Uri.file('/tmp/sclip/a.png'),
+        Uri.file('/tmp/sclip/b.pdf'),
+        Uri.file('/tmp/sclip/c.txt'),
+        Uri.file('/tmp/sclip/d.docx'),
+        Uri.file('/tmp/sclip/e.zip'),
+      ]);
+      expect(e.preview, '5 dosya: a.png, b.pdf, c.txt + 2 daha');
     });
   });
 }

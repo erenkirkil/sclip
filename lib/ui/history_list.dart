@@ -16,13 +16,12 @@ class HistoryList extends StatelessWidget {
 
   final HistoryProvider provider;
   final Future<void> Function(ClipboardEntry entry, {int? imageIndex})
-      onEntryTap;
+  onEntryTap;
   final Future<void> Function(ClipboardEntry entry) onEntryOpen;
   final FocusNode? firstItemFocusNode;
 
   @override
   Widget build(BuildContext context) {
-    
     return ListenableBuilder(
       listenable: provider,
       builder: (context, _) {
@@ -43,20 +42,24 @@ class HistoryList extends StatelessWidget {
         return CallbackShortcuts(
           bindings: {
             const SingleActivator(LogicalKeyboardKey.arrowDown): () {
-              FocusManager.instance.primaryFocus
-                  ?.focusInDirection(TraversalDirection.down);
+              FocusManager.instance.primaryFocus?.focusInDirection(
+                TraversalDirection.down,
+              );
             },
             const SingleActivator(LogicalKeyboardKey.arrowUp): () {
-              FocusManager.instance.primaryFocus
-                  ?.focusInDirection(TraversalDirection.up);
+              FocusManager.instance.primaryFocus?.focusInDirection(
+                TraversalDirection.up,
+              );
             },
             const SingleActivator(LogicalKeyboardKey.arrowRight): () {
-              FocusManager.instance.primaryFocus
-                  ?.focusInDirection(TraversalDirection.right);
+              FocusManager.instance.primaryFocus?.focusInDirection(
+                TraversalDirection.right,
+              );
             },
             const SingleActivator(LogicalKeyboardKey.arrowLeft): () {
-              FocusManager.instance.primaryFocus
-                  ?.focusInDirection(TraversalDirection.left);
+              FocusManager.instance.primaryFocus?.focusInDirection(
+                TraversalDirection.left,
+              );
             },
           },
           child: ListView.separated(

@@ -18,19 +18,16 @@ class MainFlutterWindow: NSWindow {
       switch call.method {
       case "currentState":
         // Combined probe: monotonic change counter + concealed-type check
-        // + file-promise short-circuit. changeCount lets the Dart side
-        // skip ticks when the pasteboard hasn't moved. Concealed type
+        // + file-presence flag. changeCount lets the Dart side skip ticks
+        // when the pasteboard hasn't moved. Concealed type
         // (org.nspasteboard.ConcealedType) is the cross-app convention
         // password managers set to opt out of history managers — see
-        // http://nspasteboard.org/. hasFilePromise flags any payload
-        // carrying NSFilePromise identifiers so the Dart side can skip
-        // super_clipboard's read — touching a promise resolves it and
-        // silently empties the source app's clipboard, breaking the
-        // user's own Cmd+V (Finder, Android Studio, Xcode all do this).
-        // We check "has promise" rather than "is file-only" because
-        // Finder routinely adds public.utf8-plain-text (the filename)
-        // alongside the promise; skipping requires spotting the promise,
-        // not proving nothing else is there.
+        // http://nspasteboard.org/. hasFiles covers both NSURL items
+        // (Finder direct copy) and NSFilePromise items (Xcode, some
+        // Finder bundle copies); the Dart side dispatches `readFiles`
+        // instead of super_clipboard's read because resolving a promise
+        // through super_clipboard's normal path empties the source
+        // app's clipboard and breaks the user's own Cmd+V.
         let pb = NSPasteboard.general
         let change = pb.changeCount
         let types = pb.types ?? []
@@ -44,11 +41,155 @@ class MainFlutterWindow: NSWindow {
           "com.apple.pasteboard.PromisedFileContentType",
         ]
         let hasFilePromise = types.contains { promiseTypes.contains($0.rawValue) }
+        let hasFileUrl = types.contains { $0.rawValue == "public.file-url" }
+        let hasFiles = hasFilePromise || hasFileUrl
         result([
           "change": change,
           "sensitive": sensitive,
-          "hasFilePromise": hasFilePromise,
+          "hasFiles": hasFiles,
         ])
+      case "readFiles":
+        // Resolves a "files-on-clipboard" payload into a flat list of paths
+        // the Dart side can wrap as a `ClipboardEntry.files` entry. Two
+        // sources, two strategies:
+        //
+        //   1. Direct NSURL — the common Finder-Cmd+C path. Reading these
+        //      via `readObjects(forClasses: [NSURL.self])` is non-
+        //      destructive: the source clipboard stays intact, no I/O,
+        //      no temp files. We try this first.
+        //
+        //   2. NSFilePromiseReceiver — the Xcode / asset-catalog / some-
+        //      Finder-bundle path. Apple's contract here is destructive:
+        //      `receivePromisedFiles` copies bytes into our destination
+        //      dir and the source's clipboard is effectively spent
+        //      afterwards (the user's own Cmd+V into the originating app
+        //      stops working). We compensate by republishing the
+        //      resolved file URLs back to the pasteboard so the user
+        //      gets a usable clipboard back. The Dart side's
+        //      `_lastSignature` dedup catches the resulting changeCount
+        //      bump so we don't re-ingest our own write.
+        //
+        // Args: { "entryId": String } — used as the destination dir
+        // component under <NSTemporaryDirectory>/sclip/<entryId>/ so
+        // the per-entry cleanup hook on Dart eviction can prune in one
+        // shot.
+        let pb = NSPasteboard.general
+        let args = call.arguments as? [String: Any]
+        let entryId = (args?["entryId"] as? String) ?? UUID().uuidString
+        let types = pb.types ?? []
+        let hasFileUrl = types.contains { $0.rawValue == "public.file-url" }
+
+        if hasFileUrl,
+           let urls = pb.readObjects(
+             forClasses: [NSURL.self],
+             options: [.urlReadingFileURLsOnly: true]
+           ) as? [URL],
+           !urls.isEmpty {
+          result(urls.map { $0.path })
+          return
+        }
+
+        guard let promises = pb.readObjects(
+                forClasses: [NSFilePromiseReceiver.self],
+                options: nil) as? [NSFilePromiseReceiver],
+              !promises.isEmpty else {
+          result([])
+          return
+        }
+
+        let destDir = (NSTemporaryDirectory() as NSString)
+          .appendingPathComponent("sclip")
+        let entryDir = (destDir as NSString).appendingPathComponent(entryId)
+        let entryURL = URL(fileURLWithPath: entryDir, isDirectory: true)
+        do {
+          try FileManager.default.createDirectory(
+            at: entryURL,
+            withIntermediateDirectories: true,
+            attributes: nil)
+        } catch {
+          NSLog("sclip: createDirectory failed for promise dest: \(error)")
+          result([])
+          return
+        }
+
+        // Apple's docs recommend a serial OperationQueue for promise
+        // resolution — concurrent receives on the same queue can race on
+        // identical destination filenames and produce surprises.
+        let opQueue = OperationQueue()
+        opQueue.maxConcurrentOperationCount = 1
+        let group = DispatchGroup()
+        let lock = NSLock()
+        var resolved: [URL] = []
+
+        for promise in promises {
+          group.enter()
+          promise.receivePromisedFiles(
+            atDestination: entryURL,
+            options: [:],
+            operationQueue: opQueue
+          ) { fileURL, error in
+            if let error = error {
+              NSLog("sclip: promise resolution failed: \(error)")
+            } else {
+              lock.lock()
+              resolved.append(fileURL)
+              lock.unlock()
+            }
+            group.leave()
+          }
+        }
+
+        group.notify(queue: .main) {
+          if !resolved.isEmpty {
+            // Source pasteboard is now spent — its promise is consumed.
+            // Republish resolved URLs as plain file references so the
+            // user's clipboard is still useful afterwards.
+            pb.clearContents()
+            pb.writeObjects(resolved.map { $0 as NSURL })
+          }
+          result(resolved.map { $0.path })
+        }
+      case "writeFiles":
+        // Authoritative path for publishing files back to the pasteboard.
+        // We build NSPasteboardItem instances explicitly instead of
+        // letting `pb.writeObjects([NSURL])` auto-derive types — that
+        // route attaches `public.url` (and a few other URL-flavored
+        // siblings) alongside the file URL, and Telegram on macOS
+        // currently routes such payloads through a different (and
+        // broken-for-non-image-files) drop handler. Mirroring
+        // super_clipboard's minimal per-item `public.file-url` layout
+        // keeps Telegram / Slack / Mail attachments working. We then
+        // attach the legacy `NSFilenamesPboardType` list to item 0 so
+        // Finder's "Edit > Paste Item" still lights up the way it does
+        // for a Finder→Finder copy. Empty input is a no-op so a
+        // misdispatched call can't wipe the user's clipboard.
+        let pb = NSPasteboard.general
+        let args = call.arguments as? [String: Any]
+        let paths = (args?["paths"] as? [String]) ?? []
+        let cleanedPaths = paths.filter { !$0.isEmpty }
+        if cleanedPaths.isEmpty {
+          result(nil)
+          return
+        }
+        let urls = cleanedPaths.map { URL(fileURLWithPath: $0) }
+        let fileURLType = NSPasteboard.PasteboardType("public.file-url")
+        let filenamesType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
+        pb.clearContents()
+        var items: [NSPasteboardItem] = []
+        for (index, url) in urls.enumerated() {
+          let item = NSPasteboardItem()
+          item.setString(url.absoluteString, forType: fileURLType)
+          if index == 0 {
+            // NSFilenamesPboardType is a pasteboard-level combined list
+            // (read by Finder via pb.propertyList(forType:)); writing it
+            // on item 0 satisfies that read without polluting per-item
+            // data for apps that iterate items individually.
+            item.setPropertyList(cleanedPaths, forType: filenamesType)
+          }
+          items.append(item)
+        }
+        pb.writeObjects(items)
+        result(nil)
       case "isAccessibilityTrusted":
         // Cmd+V posting via CGEvent requires Accessibility permission.
         // Without it, pasteToPrevious silently fails — let Dart side know

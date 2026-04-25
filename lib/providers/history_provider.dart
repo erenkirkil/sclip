@@ -93,10 +93,12 @@ class HistoryProvider extends ChangeNotifier {
       return;
     }
     if (entryImageBytes > 0) {
-      final existingIdx =
-          _entries.indexWhere((e) => e.contentHash == entry.contentHash);
-      final existingBytes =
-          existingIdx >= 0 ? _imageBytesOf(_entries[existingIdx]) : 0;
+      final existingIdx = _entries.indexWhere(
+        (e) => e.contentHash == entry.contentHash,
+      );
+      final existingBytes = existingIdx >= 0
+          ? _imageBytesOf(_entries[existingIdx])
+          : 0;
       var projected = _totalImageBytes() - existingBytes + entryImageBytes;
       while (projected > maxTotalImageBytes) {
         final victimIdx = _entries.lastIndexWhere(
@@ -107,8 +109,9 @@ class HistoryProvider extends ChangeNotifier {
       }
     }
 
-    final existingIndex =
-        _entries.indexWhere((e) => e.contentHash == entry.contentHash);
+    final existingIndex = _entries.indexWhere(
+      (e) => e.contentHash == entry.contentHash,
+    );
     if (existingIndex >= 0) {
       _entries.removeAt(existingIndex);
     }
@@ -119,9 +122,15 @@ class HistoryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  static bool _carriesImage(ClipboardEntry e) =>
-      e.type == ClipboardEntryType.image ||
-      e.type == ClipboardEntryType.imageSet;
+  static bool _carriesImage(ClipboardEntry e) {
+    switch (e.type) {
+      case ClipboardEntryType.image:
+      case ClipboardEntryType.imageSet:
+        return true;
+      default:
+        return false;
+    }
+  }
 
   static int _imageBytesOf(ClipboardEntry e) {
     switch (e.type) {

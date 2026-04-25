@@ -62,20 +62,17 @@ class SettingsService {
       _prefs.setBool(_kSensitiveFilter, v);
 
   bool get autoHideOnBlur => _prefs.getBool(_kAutoHideOnBlur) ?? true;
-  Future<void> setAutoHideOnBlur(bool v) =>
-      _prefs.setBool(_kAutoHideOnBlur, v);
+  Future<void> setAutoHideOnBlur(bool v) => _prefs.setBool(_kAutoHideOnBlur, v);
 
   bool get alwaysOnTopDefault => _prefs.getBool(_kAlwaysOnTop) ?? false;
   Future<void> setAlwaysOnTopDefault(bool v) =>
       _prefs.setBool(_kAlwaysOnTop, v);
 
   int get pollingIntervalMs => _prefs.getInt(_kPollingMs) ?? 500;
-  Future<void> setPollingIntervalMs(int ms) =>
-      _prefs.setInt(_kPollingMs, ms);
+  Future<void> setPollingIntervalMs(int ms) => _prefs.setInt(_kPollingMs, ms);
 
   bool get clearOnStartup => _prefs.getBool(_kClearOnStartup) ?? false;
-  Future<void> setClearOnStartup(bool v) =>
-      _prefs.setBool(_kClearOnStartup, v);
+  Future<void> setClearOnStartup(bool v) => _prefs.setBool(_kClearOnStartup, v);
 
   HotKey? get toggleHotkey {
     final raw = _prefs.getString(_kHotkey);

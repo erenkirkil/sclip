@@ -44,18 +44,30 @@ class _ClipboardEntryTileState extends State<ClipboardEntryTile> {
   // Up/Down snap between tile primaries (the actual copy target) instead of
   // landing on a destructive action. Explicit Right/Left via our
   // CallbackShortcuts still reaches them via requestFocus.
-  final FocusNode _openFocus =
-      FocusNode(debugLabel: 'entry-open', skipTraversal: true);
-  final FocusNode _deleteFocus =
-      FocusNode(debugLabel: 'entry-delete', skipTraversal: true);
-  final FocusNode _pasteAllFocus =
-      FocusNode(debugLabel: 'entry-paste-all', skipTraversal: true);
+  final FocusNode _openFocus = FocusNode(
+    debugLabel: 'entry-open',
+    skipTraversal: true,
+  );
+  final FocusNode _deleteFocus = FocusNode(
+    debugLabel: 'entry-delete',
+    skipTraversal: true,
+  );
+  final FocusNode _pasteAllFocus = FocusNode(
+    debugLabel: 'entry-paste-all',
+    skipTraversal: true,
+  );
   bool _ownsTileFocus = false;
 
   /// Extra focus nodes for thumbnails 1..N-1 on imageSet tiles. Thumbnail 0
   /// uses [_tileFocus] so the externally provided focusNode (for the
   /// "autofocus first tile" hotkey flow) drops straight onto it.
   final List<FocusNode> _extraThumbFocuses = [];
+
+  /// Index of the row-end thumbnail the user stepped out of when hopping
+  /// to paste-all / delete via ArrowRight. ArrowLeft from paste-all
+  /// restores focus here so the user lands back on the row they came from
+  /// instead of being teleported to the grid's tail.
+  int? _originatingThumb;
 
   @override
   void initState() {
@@ -91,9 +103,22 @@ class _ClipboardEntryTileState extends State<ClipboardEntryTile> {
     super.dispose();
   }
 
+  /// Restores focus to the previously recorded origin thumb (set whenever
+  /// the user stepped out of the grid via ArrowLeft/Right) or [fallback]
+  /// when no origin is known or the origin is no longer in range (e.g. the
+  /// imageSet shrunk between the hop-out and the hop-back).
+  void _focusOriginThumbOr(List<FocusNode> thumbs, FocusNode fallback) {
+    final origin = _originatingThumb;
+    if (origin != null && origin >= 0 && origin < thumbs.length) {
+      thumbs[origin].requestFocus();
+    } else {
+      fallback.requestFocus();
+    }
+  }
+
   void _focusFirstTrailing() {
-    final canOpen = widget.onOpen != null &&
-        widget.entry.type == ClipboardEntryType.url;
+    final canOpen =
+        widget.onOpen != null && widget.entry.type == ClipboardEntryType.url;
     if (canOpen) {
       _openFocus.requestFocus();
     } else {
@@ -129,8 +154,8 @@ class _ClipboardEntryTileState extends State<ClipboardEntryTile> {
     // delete button (error tint, "about to delete").
     final tileFocus = scheme.primary.withValues(alpha: 0.18);
     final tileHover = scheme.primary.withValues(alpha: 0.08);
-    final canOpen = widget.onOpen != null &&
-        widget.entry.type == ClipboardEntryType.url;
+    final canOpen =
+        widget.onOpen != null && widget.entry.type == ClipboardEntryType.url;
     return CallbackShortcuts(
       bindings: {
         // Right from tile → first trailing button; from open → delete; from
@@ -249,10 +274,13 @@ class _ClipboardEntryTileState extends State<ClipboardEntryTile> {
           if (i >= 0) {
             // End of any visual row (or last thumb overall) hops to the
             // trailing button column so the user isn't forced to walk every
-            // thumb before reaching paste-all / delete.
+            // thumb before reaching paste-all / delete. Recording the
+            // origin here is what lets ArrowLeft from paste-all return to
+            // the same row instead of yanking focus to the grid's tail.
             final atRowEnd = (i + 1) % columns == 0;
             final atLast = i == thumbFocuses.length - 1;
             if (atRowEnd || atLast) {
+              _originatingThumb = i;
               if (canPasteAll) {
                 _pasteAllFocus.requestFocus();
               } else {
@@ -271,22 +299,22 @@ class _ClipboardEntryTileState extends State<ClipboardEntryTile> {
             if (canPasteAll) {
               _pasteAllFocus.requestFocus();
             } else if (thumbFocuses.isNotEmpty) {
-              thumbFocuses.last.requestFocus();
+              // No paste-all between delete and the grid: fall back to the
+              // row-end the user came from when known, otherwise the
+              // grid's tail (matches the linear-step expectation).
+              _focusOriginThumbOr(thumbFocuses, thumbFocuses.last);
             }
             return;
           }
           if (primary == _pasteAllFocus && thumbFocuses.isNotEmpty) {
-            // Return to the row-end the user most likely came from: the last
-            // thumb of the row they were on. We don't track that explicitly,
-            // so fall back to the grid's last thumb — it's always at a row
-            // edge by virtue of being last.
-            thumbFocuses.last.requestFocus();
+            // Restore the row-end the user stepped out of so paste-all
+            // round-trips don't yank focus to the grid's tail when the
+            // user was on an earlier row.
+            _focusOriginThumbOr(thumbFocuses, thumbFocuses.last);
             return;
           }
           final i = thumbFocuses.indexOf(primary!);
-          if (i > 0) {
-            thumbFocuses[i - 1].requestFocus();
-          }
+          if (i > 0) thumbFocuses[i - 1].requestFocus();
         },
         // Up/Down jump one row inside the grid; at grid edges they fall
         // through to cross-tile traversal.
@@ -523,11 +551,7 @@ class _Leading extends StatelessWidget {
         if (xml != null && xml.isNotEmpty) {
           return ClipRRect(
             borderRadius: BorderRadius.circular(4),
-            child: SizedBox(
-              width: 48,
-              height: 48,
-              child: _SafeSvg(xml: xml),
-            ),
+            child: SizedBox(width: 48, height: 48, child: _SafeSvg(xml: xml)),
           );
         }
         return const Icon(Icons.image_outlined);
@@ -555,6 +579,10 @@ class _Leading extends StatelessWidget {
         return const Icon(Icons.link);
       case ClipboardEntryType.files:
         return const Icon(Icons.folder);
+      case ClipboardEntryType.pdf:
+        return const Icon(Icons.picture_as_pdf);
+      case ClipboardEntryType.richText:
+        return const Icon(Icons.text_snippet_outlined);
       case ClipboardEntryType.text:
         return const Icon(Icons.notes);
     }

@@ -3,7 +3,17 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 
-enum ClipboardEntryType { text, image, imageSet, url, files, color, svg }
+enum ClipboardEntryType {
+  text,
+  image,
+  imageSet,
+  url,
+  files,
+  color,
+  svg,
+  pdf,
+  richText,
+}
 
 enum ClipboardImageFormat { png, jpeg, gif, webp }
 
@@ -19,6 +29,8 @@ class ClipboardEntry {
     this.imagesBytes,
     this.imagesFormats,
     this.uris,
+    this.pdfBytes,
+    this.richTextHtml,
     this.isSensitive = false,
   });
 
@@ -28,12 +40,25 @@ class ClipboardEntry {
   final String? text;
   final Uint8List? imageBytes;
   final ClipboardImageFormat? imageFormat;
+
   /// Populated for [ClipboardEntryType.imageSet] — one entry per clipboard
   /// item when the user copies multiple images at once. For single-image
   /// entries this stays null and [imageBytes]/[imageFormat] are used.
   final List<Uint8List>? imagesBytes;
   final List<ClipboardImageFormat>? imagesFormats;
   final List<Uri>? uris;
+
+  /// Raw PDF bytes for [ClipboardEntryType.pdf]. Held in RAM like every other
+  /// entry — release builds rely on the per-entry size cap in
+  /// `ClipboardService._maxPdfBytes` to keep history bounded.
+  final Uint8List? pdfBytes;
+
+  /// HTML representation for [ClipboardEntryType.richText]. The plain-text
+  /// fallback lives in [text] so previews and dedup don't need to care about
+  /// markup. Both are written back together so target apps preserve the rich
+  /// formatting (`Formats.htmlText` plus `Formats.plainText`).
+  final String? richTextHtml;
+
   final bool isSensitive;
 
   /// Short SHA-256 fingerprint of the content. Used for dedup across the
@@ -92,8 +117,7 @@ class ClipboardEntry {
     bool isSensitive = false,
   }) {
     assert(bytes.length >= 2, 'imageSet requires at least two images');
-    final fmts = formats ??
-        List.filled(bytes.length, ClipboardImageFormat.png);
+    final fmts = formats ?? List.filled(bytes.length, ClipboardImageFormat.png);
     assert(
       fmts.length == bytes.length,
       'formats length must match bytes length',
@@ -132,6 +156,39 @@ class ClipboardEntry {
     );
   }
 
+  factory ClipboardEntry.pdf(Uint8List bytes, {bool isSensitive = false}) {
+    return ClipboardEntry._(
+      id: _newId(),
+      type: ClipboardEntryType.pdf,
+      createdAt: DateTime.now(),
+      pdfBytes: bytes,
+      isSensitive: isSensitive,
+      contentHash: _hashBytes('p', bytes),
+    );
+  }
+
+  /// Stores both representations side-by-side so writeBack can publish
+  /// HTML + plainText together, preserving formatting in the target app
+  /// (otherwise the formatting silently collapses to plain text). [plainText]
+  /// is used for previews and dedup; [html] is the source-of-truth markup.
+  factory ClipboardEntry.richText({
+    required String plainText,
+    required String html,
+    bool isSensitive = false,
+  }) {
+    return ClipboardEntry._(
+      id: _newId(),
+      type: ClipboardEntryType.richText,
+      createdAt: DateTime.now(),
+      text: plainText,
+      richTextHtml: html,
+      isSensitive: isSensitive,
+      // Hash both so two snippets that render the same plain text but
+      // differ in markup don't collide and silently swallow the second copy.
+      contentHash: _hashText('r', '$plainText\u0000$html'),
+    );
+  }
+
   factory ClipboardEntry.files(List<Uri> files, {bool isSensitive = false}) {
     final joined = files.map((u) => u.toString()).join('|');
     return ClipboardEntry._(
@@ -148,23 +205,26 @@ class ClipboardEntry {
   /// createdAt. Used when the user taps an existing entry to re-copy it so
   /// the "just now" label reflects the latest action.
   ClipboardEntry touched() => ClipboardEntry._(
-        id: id,
-        type: type,
-        createdAt: DateTime.now(),
-        text: text,
-        imageBytes: imageBytes,
-        imageFormat: imageFormat,
-        imagesBytes: imagesBytes,
-        imagesFormats: imagesFormats,
-        uris: uris,
-        isSensitive: isSensitive,
-        contentHash: contentHash,
-      );
+    id: id,
+    type: type,
+    createdAt: DateTime.now(),
+    text: text,
+    imageBytes: imageBytes,
+    imageFormat: imageFormat,
+    imagesBytes: imagesBytes,
+    imagesFormats: imagesFormats,
+    uris: uris,
+    pdfBytes: pdfBytes,
+    richTextHtml: richTextHtml,
+    isSensitive: isSensitive,
+    contentHash: contentHash,
+  );
 
   String get preview {
     switch (type) {
       case ClipboardEntryType.text:
       case ClipboardEntryType.url:
+      case ClipboardEntryType.richText:
         final t = (text ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
         return t.length > 120 ? '${t.substring(0, 120)}…' : t;
       case ClipboardEntryType.color:
@@ -174,21 +234,38 @@ class ClipboardEntry {
         return '$fmt · ${_formatBytes(imageBytes?.lengthInBytes ?? 0)}';
       case ClipboardEntryType.imageSet:
         final count = imagesBytes?.length ?? 0;
-        final total = imagesBytes?.fold<int>(
-              0,
-              (sum, b) => sum + b.lengthInBytes,
-            ) ??
-            0;
+        final total =
+            imagesBytes?.fold<int>(0, (sum, b) => sum + b.lengthInBytes) ?? 0;
         return '$count resim · ${_formatBytes(total)}';
       case ClipboardEntryType.svg:
         final bytes = (text ?? '').length;
         return 'SVG · ${bytes}B';
+      case ClipboardEntryType.pdf:
+        return 'PDF · ${_formatBytes(pdfBytes?.lengthInBytes ?? 0)}';
       case ClipboardEntryType.files:
-        final n = uris?.length ?? 0;
-        if (n == 0) return 'Files';
-        if (n == 1) return uris!.first.toFilePath();
-        return '$n files';
+        final list = uris ?? const <Uri>[];
+        final n = list.length;
+        if (n == 0) return 'Dosya yok';
+        if (n == 1) return _basenameOf(list.first);
+        // Multi-file: show count + first basenames so the user can tell at a
+        // glance which files this entry holds without expanding it. 3 names
+        // fits a single tile line at typical window widths; the rest collapse
+        // into "+ N daha" so the preview never wraps unpredictably.
+        final shown = list.take(3).map(_basenameOf).join(', ');
+        if (n <= 3) return '$n dosya: $shown';
+        return '$n dosya: $shown + ${n - 3} daha';
     }
+  }
+
+  /// Last path component of a file URI (or path-like string), tolerant to
+  /// both `/` and `\` separators so a Windows path like
+  /// `C:\Users\foo\bar.txt` reads `bar.txt` even when the URI was decoded
+  /// with mixed separators. Returns the whole input when no separator is
+  /// found so we never display an empty cell.
+  static String _basenameOf(Uri uri) {
+    final path = uri.isScheme('file') ? uri.toFilePath() : uri.toString();
+    final sep = path.lastIndexOf(RegExp(r'[/\\]'));
+    return sep >= 0 && sep < path.length - 1 ? path.substring(sep + 1) : path;
   }
 
   /// Compact human size for previews: KB under 1MB, MB with one decimal
@@ -230,13 +307,16 @@ class ClipboardEntry {
           return '${b.length}:$d';
         })
         .join('|');
-    final combined =
-        sha256.convert(utf8.encode(parts)).toString().substring(0, 16);
+    final combined = sha256
+        .convert(utf8.encode(parts))
+        .toString()
+        .substring(0, 16);
     return 'is:${images.length}:$combined';
   }
 
-  static final RegExp _hexColorRe =
-      RegExp(r'^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$');
+  static final RegExp _hexColorRe = RegExp(
+    r'^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$',
+  );
   static final RegExp _rgbColorRe = RegExp(
     r'^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(?:,\s*(?:0|1|0?\.\d+)\s*)?\)$',
     caseSensitive: false,

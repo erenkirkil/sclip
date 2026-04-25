@@ -9,15 +9,15 @@ import '../services/settings_service.dart';
 /// cap, polling interval, hotkey) reacts instantly without a restart.
 class SettingsProvider extends ChangeNotifier {
   SettingsProvider(this._service)
-      : _themeMode = _service.themeMode,
-        _maxItems = _service.maxItems,
-        _sensitiveFilterEnabled = _service.sensitiveFilterEnabled,
-        _autoHideOnBlur = _service.autoHideOnBlur,
-        _alwaysOnTopDefault = _service.alwaysOnTopDefault,
-        _pollingIntervalMs = _service.pollingIntervalMs,
-        _clearOnStartup = _service.clearOnStartup,
-        _toggleHotkey =
-            _service.toggleHotkey ?? SettingsService.defaultToggleHotkey();
+    : _themeMode = _service.themeMode,
+      _maxItems = _service.maxItems,
+      _sensitiveFilterEnabled = _service.sensitiveFilterEnabled,
+      _autoHideOnBlur = _service.autoHideOnBlur,
+      _alwaysOnTopDefault = _service.alwaysOnTopDefault,
+      _pollingIntervalMs = _service.pollingIntervalMs,
+      _clearOnStartup = _service.clearOnStartup,
+      _toggleHotkey =
+          _service.toggleHotkey ?? SettingsService.defaultToggleHotkey();
 
   final SettingsService _service;
 
