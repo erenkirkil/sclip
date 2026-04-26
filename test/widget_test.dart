@@ -13,7 +13,7 @@ void main() {
     await tester.pumpWidget(SclipApp(settings: settings));
     await tester.pump();
 
-    expect(find.text('sclip'), findsOneWidget);
+    expect(find.bySemanticsLabel('sclip'), findsOneWidget);
     expect(find.textContaining('Henüz içerik yok'), findsOneWidget);
   });
 }

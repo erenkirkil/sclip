@@ -61,6 +61,10 @@ Future<void> main() async {
 class SclipApp extends StatelessWidget {
   SclipApp({super.key, required this.settings});
 
+  // Mid-green from the logo gradient (sc.svg / logo.svg, offset 0.62). Seed
+  // for Material 3 — light/dark schemes derive harmonised tones from this.
+  static const _brandSeed = Color(0xFF609D4F);
+
   final SettingsProvider settings;
 
   /// Exposed so the global Escape handler can pop any open modal before
@@ -78,12 +82,12 @@ class SclipApp extends StatelessWidget {
         navigatorKey: navigatorKey,
         themeMode: settings.themeMode,
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+          colorScheme: ColorScheme.fromSeed(seedColor: _brandSeed),
           useMaterial3: true,
         ),
         darkTheme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.indigo,
+            seedColor: _brandSeed,
             brightness: Brightness.dark,
           ),
           useMaterial3: true,
@@ -734,7 +738,13 @@ class _HomePageState extends State<HomePage> with WindowListener {
           appBar: AppBar(
             toolbarHeight: 40,
             titleSpacing: 8,
-            title: const Text('sclip', style: TextStyle(fontSize: 14)),
+            title: Image.asset(
+              'assets/branding/logo.png',
+              height: 22,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.medium,
+              semanticLabel: 'sclip',
+            ),
             centerTitle: true,
             actions: [
               ListenableBuilder(
