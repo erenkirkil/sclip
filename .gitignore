@@ -99,3 +99,8 @@ tmp/
 temp/
 *.tmp
 *.bak
+
+# ===== Distribution artefaktları =====
+dist/
+*.dmg
+*.zip

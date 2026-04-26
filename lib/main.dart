@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:screen_retriever/screen_retriever.dart';
@@ -22,13 +23,17 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Surface the default red-screen errors to the console so we can diagnose
-  // frames that flash an error widget without leaving a log trail.
-  final prevOnError = FlutterError.onError;
-  FlutterError.onError = (details) {
-    debugPrint('sclip: widget error: ${details.exception}');
-    if (details.stack != null) debugPrint('${details.stack}');
-    prevOnError?.call(details);
-  };
+  // frames that flash an error widget without leaving a log trail. Debug
+  // builds only — release binaries fall back to Flutter's default handler so
+  // we don't leak stack traces into shipped artefacts.
+  if (kDebugMode) {
+    final prevOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      debugPrint('sclip: widget error: ${details.exception}');
+      if (details.stack != null) debugPrint('${details.stack}');
+      prevOnError?.call(details);
+    };
+  }
 
   // Load persisted user preferences (theme, hotkey, toggles) before the
   // first frame so the app opens in the user's configured state — no
