@@ -297,18 +297,18 @@ class _HomePageState extends State<HomePage> with WindowListener {
       await _hideAndReturnFocus();
     } else {
       // Remember who currently owns the foreground so the native paste
-      // handler can restore it precisely instead of racing with whatever
-      // Windows decides to focus next. macOS handles this deterministically
-      // via NSApp.hide, no capture needed there.
-      if (Platform.isWindows) {
-        try {
-          await _windowChannel.invokeMethod('captureForeground');
-        } on MissingPluginException {
-          // Older Windows build without the handler — paste path falls back
-          // to the timing-based behaviour.
-        } catch (e) {
-          debugPrint('sclip: captureForeground failed: $e');
-        }
+      // handler can verify the right target is back after our hide.
+      // Windows stores the HWND for explicit SetForegroundWindow restore;
+      // macOS stores the pid for a post-hide guard around CGEvent Cmd+V.
+      // Both protect against landing keys in sclip itself or in whatever
+      // app the OS happens to promote next.
+      try {
+        await _windowChannel.invokeMethod('captureForeground');
+      } on MissingPluginException {
+        // Older build without the handler — paste path falls back to the
+        // timing-based behaviour.
+      } catch (e) {
+        debugPrint('sclip: captureForeground failed: $e');
       }
       await _positionNearCursor();
       await windowManager.show();

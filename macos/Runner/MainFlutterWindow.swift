@@ -1,6 +1,13 @@
 import Cocoa
 import FlutterMacOS
 
+// Frontmost-app pid captured *before* sclip is shown by the Dart side, so
+// pasteToPrevious can verify the right app is back in the foreground after
+// NSApp.hide settles. Capturing at pasteToPrevious call-time is too late —
+// sclip itself is frontmost by then, which made the guard always abort.
+// Mirrors the Windows g_paste_target / captureForeground pattern.
+private var capturedFrontmostPid: pid_t?
+
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -266,20 +273,31 @@ class MainFlutterWindow: NSWindow {
           ],
           "displays": displays,
         ])
+      case "captureForeground":
+        // Snapshot the frontmost app *before* the Dart side calls show/
+        // focus. pasteToPrevious uses this as the expected target after
+        // NSApp.hide settles. Same role as Windows' captureForeground.
+        capturedFrontmostPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        result(nil)
       case "pasteToPrevious":
-        // Capture the frontmost app pid *before* we hide sclip. After the
-        // 120 ms settle we verify the same app is still frontmost — if the
-        // user switched windows during the race window we skip injection
-        // rather than pasting into the wrong target.
-        let targetPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        // Verified path: when captureForeground ran at show-time, we
+        // know which app to paste into and abort if anyone else is
+        // frontmost after the 120 ms settle. Unverified fallback: when
+        // capture didn't run (e.g. tests, future paths that bypass
+        // _toggleWindow), trust the OS to bring the right app forward
+        // and post Cmd+V without the pid check — pre-sprint-10
+        // behaviour, slightly less safe but never silently aborts.
+        let targetPid = capturedFrontmostPid
+        capturedFrontmostPid = nil
         NSApp.hide(nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-          let currentPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
-          guard let expected = targetPid, let actual = currentPid, expected == actual else {
-            // Foreground changed during the race window — abort paste.
-            NSLog("[sclip] pasteToPrevious aborted: foreground pid changed (%@ → %@)",
-                  String(describing: targetPid), String(describing: currentPid))
-            return
+          if let expected = targetPid {
+            let currentPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            guard let actual = currentPid, expected == actual else {
+              NSLog("[sclip] pasteToPrevious aborted: foreground pid changed (%@ → %@)",
+                    String(describing: targetPid), String(describing: currentPid))
+              return
+            }
           }
           let src = CGEventSource(stateID: .combinedSessionState)
           let vKey: CGKeyCode = 0x09

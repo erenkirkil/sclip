@@ -172,6 +172,7 @@ class ClipboardService {
             await clipboard.write(items);
           }
           _lastSignature = entry.contentHash;
+          await _captureWriteChange();
           return;
         }
         final i = imageIndex.clamp(0, bytes.length - 1);
@@ -186,6 +187,7 @@ class ClipboardService {
           bytes[i],
           format: fmt,
         ).contentHash;
+        await _captureWriteChange();
         return;
       case ClipboardEntryType.files:
         final uris = entry.uris;
@@ -210,6 +212,7 @@ class ClipboardService {
           await clipboard.write(items);
         }
         _lastSignature = entry.contentHash;
+        await _captureWriteChange();
         return;
       case ClipboardEntryType.pdf:
         final bytes = entry.pdfBytes;
@@ -241,6 +244,24 @@ class ClipboardService {
     }
     await clipboard.write([item]);
     _lastSignature = entry.contentHash;
+    await _captureWriteChange();
+  }
+
+  /// Probes the OS clipboard immediately after our own write so we can fast-forward
+  /// `_lastChange`. This prevents the next `_tick` from reading the clipboard
+  /// entirely, which solves a macOS edge case where `NSPasteboard` slightly
+  /// modifies HTML/RTF payloads upon write. Without this, the modified payload
+  /// produces a different `contentHash` on read, causing our own write to be
+  /// incorrectly ingested as a duplicate.
+  Future<void> _captureWriteChange() async {
+    try {
+      final state = await _stateProbe();
+      if (state.change != -1) {
+        _lastChange = state.change;
+      }
+    } catch (e) {
+      debugPrint('sclip: failed to capture write change: $e');
+    }
   }
 
   /// Writes [bytes] to `<tempDir>/sclip/<entryId>/clipboard.<ext>` and
