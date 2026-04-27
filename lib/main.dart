@@ -136,6 +136,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
   late final HotkeyService _hotkey;
   final FocusNode _firstItemFocus = FocusNode(debugLabel: 'sclip-first-item');
   StreamSubscription<ClipboardEntry>? _sub;
+  Timer? _blurHideTimer;
 
   /// True once we've confirmed macOS Accessibility is granted (or we're on a
   /// platform where it doesn't apply). While false on macOS, the paste-to-
@@ -268,6 +269,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   @override
   void dispose() {
+    _blurHideTimer?.cancel();
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     windowManager.removeListener(this);
     widget.settings.removeListener(_onSettingsChanged);
@@ -281,11 +283,17 @@ class _HomePageState extends State<HomePage> with WindowListener {
   }
 
   Future<void> _toggleWindow() async {
+    // If a blur event just happened (e.g. from clicking the tray icon), 
+    // cancel its hide action so we can handle the toggle explicitly here 
+    // without a race condition.
+    final wasBlurPending = _blurHideTimer?.isActive ?? false;
+    _blurHideTimer?.cancel();
+
     final visible = await windowManager.isVisible();
     // We intentionally ignore isFocused: if the window is on screen at all
     // (e.g. opened via tray click and now lives in the background), pressing
     // the hotkey should hide it rather than fight its focus state.
-    if (visible) {
+    if (visible && !wasBlurPending) {
       await _hideAndReturnFocus();
     } else {
       // Remember who currently owns the foreground so the native paste
@@ -408,9 +416,12 @@ class _HomePageState extends State<HomePage> with WindowListener {
     // would feel like a teleport. When we can't determine the display,
     // fall back to the preferred size and hope for the best.
     final layout = await _queryScreenLayout();
-    final bounds = layout == null
+    final display = layout == null
         ? null
         : _displayContaining(previousPosition, layout.displays);
+    final bounds = display?.visible;
+    final scale = Platform.isWindows ? (display?.scaleFactor ?? 1.0) : 1.0;
+    
     final settingsSize = bounds == null
         ? _settingsPreferredSize
         : _settingsSizeFor(bounds);
@@ -427,11 +438,17 @@ class _HomePageState extends State<HomePage> with WindowListener {
     // right corner) and clicked Settings, the window should still hug the
     // top-right after growing — not jump to the centre of the display.
     // Clamping nudges only as much as needed to keep the bigger size
-    // inside the visible bounds.
+    // inside the visible bounds. Physical clamping is used on Windows.
     if (bounds != null) {
-      final clamped = _clampInto(previousPosition, settingsSize, bounds);
-      if (clamped != previousPosition) {
-        await windowManager.setPosition(clamped);
+      final physicalSize = Size(settingsSize.width * scale, settingsSize.height * scale);
+      final physicalPosition = Offset(previousPosition.dx * scale, previousPosition.dy * scale);
+      final clampedPhysical = _clampInto(physicalPosition, physicalSize, bounds);
+      final clampedLogical = Platform.isWindows 
+          ? Offset(clampedPhysical.dx / scale, clampedPhysical.dy / scale)
+          : clampedPhysical;
+
+      if (clampedLogical != previousPosition) {
+        await windowManager.setPosition(clampedLogical);
       }
     }
     if (!mounted) return;
@@ -472,7 +489,14 @@ class _HomePageState extends State<HomePage> with WindowListener {
         final currentPosition = await windowManager.getPosition();
         final expectedOpenPosition = bounds == null
             ? previousPosition
-            : _clampInto(previousPosition, settingsSize, bounds);
+            : (() {
+                final physicalSize = Size(settingsSize.width * scale, settingsSize.height * scale);
+                final physicalPos = Offset(previousPosition.dx * scale, previousPosition.dy * scale);
+                final clampedPhysical = _clampInto(physicalPos, physicalSize, bounds);
+                return Platform.isWindows 
+                    ? Offset(clampedPhysical.dx / scale, clampedPhysical.dy / scale)
+                    : clampedPhysical;
+              })();
         final unmoved =
             (currentPosition - expectedOpenPosition).distanceSquared < 1.0;
         if (unmoved) {
@@ -487,12 +511,11 @@ class _HomePageState extends State<HomePage> with WindowListener {
   /// space. Queried from our own native channel because
   /// `screen_retriever` 0.2.0 normalises cursor Y against
   /// `min(frame.maxY)` but display Y against `primary.frame.height` —
-  /// the two anchors diverge on multi-monitor layouts where the
   /// secondary is taller or sits side-by-side, so cursor-in-display
   /// containment silently fails. Falling back to `screen_retriever`
   /// when the channel isn't available keeps tests + non-desktop hosts
   /// working.
-  Future<({Offset cursor, List<({Rect visible, Rect full})> displays})?>
+  Future<({Offset cursor, List<({Rect visible, Rect full, double scaleFactor})> displays})?>
   _queryScreenLayout() async {
     try {
       final layout = await _windowChannel.invokeMapMethod<String, dynamic>(
@@ -520,6 +543,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
                 (d['fullWidth'] as num? ?? d['width'] as num).toDouble(),
                 (d['fullHeight'] as num? ?? d['height'] as num).toDouble(),
               ),
+              scaleFactor: (d['scaleFactor'] as num? ?? 1.0).toDouble(),
             ),
         ];
         return (cursor: cursor, displays: displays);
@@ -542,7 +566,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
                       d.size.width / (d.scaleFactor ?? 1.0).toDouble(),
                       d.size.height / (d.scaleFactor ?? 1.0).toDouble(),
                     ));
-            return (visible: visible, full: visible);
+            return (visible: visible, full: visible, scaleFactor: (d.scaleFactor ?? 1.0).toDouble());
           })(),
       ];
       return (cursor: cursor, displays: displays);
@@ -557,17 +581,18 @@ class _HomePageState extends State<HomePage> with WindowListener {
   /// taskbar) so a tray-icon click — which by definition lands on the
   /// menu bar — still resolves to the right display. The returned rect
   /// is the *visible* frame, since callers clamp the window into it and
+  /// is the *visible* frame, since callers clamp the window into it and
   /// never want sclip sliding under the menu bar. Falls back to the
   /// primary (first) display when nothing contains the point.
-  Rect? _displayContaining(
+  ({Rect visible, Rect full, double scaleFactor})? _displayContaining(
     Offset point,
-    List<({Rect visible, Rect full})> displays,
+    List<({Rect visible, Rect full, double scaleFactor})> displays,
   ) {
     if (displays.isEmpty) return null;
     for (final d in displays) {
-      if (d.full.contains(point)) return d.visible;
+      if (d.full.contains(point)) return d;
     }
-    return displays.first.visible;
+    return displays.first;
   }
 
   /// Window size used while the settings modal is open, adapted to the
@@ -607,17 +632,27 @@ class _HomePageState extends State<HomePage> with WindowListener {
     try {
       final layout = await _queryScreenLayout();
       if (layout == null) return;
-      final bounds = _displayContaining(layout.cursor, layout.displays);
-      if (bounds == null) return;
+      final display = _displayContaining(layout.cursor, layout.displays);
+      if (display == null) return;
+      final bounds = display.visible;
+      final scale = Platform.isWindows ? display.scaleFactor : 1.0;
       final size = await windowManager.getSize();
+      final physicalSize = Size(size.width * scale, size.height * scale);
 
       // Align top-center of window slightly below cursor so it doesn't
       // cover the click point, clamped to the visible screen.
-      final desired = Offset(
-        layout.cursor.dx - size.width / 2,
-        layout.cursor.dy + 12,
+      // Cursor and bounds are returned in physical pixels on Windows.
+      final desiredPhysical = Offset(
+        layout.cursor.dx - physicalSize.width / 2,
+        layout.cursor.dy + (12 * scale),
       );
-      await windowManager.setPosition(_clampInto(desired, size, bounds));
+      
+      final clampedPhysical = _clampInto(desiredPhysical, physicalSize, bounds);
+      final logicalPosition = Platform.isWindows 
+          ? Offset(clampedPhysical.dx / scale, clampedPhysical.dy / scale)
+          : clampedPhysical;
+
+      await windowManager.setPosition(logicalPosition);
     } catch (e) {
       // Fall back to current position on any platform hiccup (e.g. cursor
       // on a disconnected monitor, permission races on first launch).
@@ -675,15 +710,17 @@ class _HomePageState extends State<HomePage> with WindowListener {
     if (Platform.isWindows) {
       // Hide instantly visually to keep UI snappy
       await windowManager.setOpacity(0.0);
+    }
 
-      // Wait for Enter to be released so it doesn't get stuck in Flutter's state
-      // (which causes the 2-press bug) and doesn't interfere with Ctrl+V.
-      final waitStart = DateTime.now();
-      while (HardwareKeyboard.instance.logicalKeysPressed.isNotEmpty) {
-        if (DateTime.now().difference(waitStart).inMilliseconds > 500) break;
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
+    // Wait for Enter to be released so it doesn't get stuck in Flutter's state
+    // (which causes the 2-press bug) and doesn't interfere with Ctrl+V/Cmd+V.
+    final waitStart = DateTime.now();
+    while (HardwareKeyboard.instance.logicalKeysPressed.isNotEmpty) {
+      if (DateTime.now().difference(waitStart).inMilliseconds > 500) break;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
 
+    if (Platform.isWindows) {
       await windowManager.hide();
       await windowManager.setOpacity(1.0);
     }
@@ -729,7 +766,15 @@ class _HomePageState extends State<HomePage> with WindowListener {
     // _suppressBlur guards against our own hide path, which also fires
     // blur on macOS.
     if (_pinned || _suppressBlur || !widget.settings.autoHideOnBlur) return;
-    unawaited(_hideAndReturnFocus());
+    
+    // Delay hide by 150ms to allow `onTrayIconMouseDown` to cancel it.
+    // Without this, clicking the tray icon while the window is focused triggers
+    // an immediate blur (hiding the window) which races with the tray's own
+    // toggle command.
+    _blurHideTimer?.cancel();
+    _blurHideTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted) unawaited(_hideAndReturnFocus());
+    });
   }
 
   Future<void> _openAccessibilitySettings() async {

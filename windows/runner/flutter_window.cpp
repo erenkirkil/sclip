@@ -295,6 +295,8 @@ bool FlutterWindow::OnCreate() {
                 MONITORINFOEXW info{};
                 info.cbSize = sizeof(info);
                 if (GetMonitorInfoW(mon, &info)) {
+                  UINT dpi = FlutterDesktopGetDpiForMonitor(mon);
+                  double scaleFactor = dpi / 96.0;
                   flutter::EncodableMap m;
                   m[flutter::EncodableValue("id")] = flutter::EncodableValue(
                       std::string(reinterpret_cast<const char*>(info.szDevice),
@@ -325,6 +327,8 @@ bool FlutterWindow::OnCreate() {
                   m[flutter::EncodableValue("fullHeight")] =
                       flutter::EncodableValue(static_cast<double>(
                           info.rcMonitor.bottom - info.rcMonitor.top));
+                  m[flutter::EncodableValue("scaleFactor")] =
+                      flutter::EncodableValue(scaleFactor);
                   list->push_back(flutter::EncodableValue(m));
                 }
                 return TRUE;

@@ -63,6 +63,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   bool _advancedExpanded = false;
   bool _recordingHotkey = false;
 
@@ -98,7 +99,8 @@ class _SettingsPageState extends State<SettingsPage> {
       // Single-modifier combos (e.g. Cmd+V, Ctrl+C) collide with standard
       // system shortcuts; we require at least two modifiers + a key so the
       // combo is distinctive enough to not steal a common OS binding.
-      ScaffoldMessenger.of(context).showSnackBar(
+      _messengerKey.currentState?.clearSnackBars();
+      _messengerKey.currentState?.showSnackBar(
         const SnackBar(
           content: Text(
             'En az 2 modifier (Cmd/Ctrl/Alt/Shift) + bir tuş gerekli.',
@@ -110,7 +112,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final ok = await widget.onHotkeyChange(captured);
     if (!mounted) return;
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      _messengerKey.currentState?.clearSnackBars();
+      _messengerKey.currentState?.showSnackBar(
         const SnackBar(
           content: Text(
             'Bu kombinasyon başka bir uygulama tarafından kullanılıyor.',
@@ -124,9 +127,11 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     final s = widget.settings;
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Ayarlar'),
+    return ScaffoldMessenger(
+      key: _messengerKey,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Ayarlar'),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
@@ -273,7 +278,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ],
       ),
-    );
+    ));
   }
 
   static String _hotkeyLabel(HotKey hotkey) {

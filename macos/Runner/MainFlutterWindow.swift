@@ -256,6 +256,7 @@ class MainFlutterWindow: NSWindow {
             "fullY": fullTopLeftY,
             "fullWidth": f.width,
             "fullHeight": f.height,
+            "scaleFactor": s.backingScaleFactor,
           ] as NSDictionary
         }
         result([
