@@ -8,7 +8,7 @@
 PRODUCT_NAME = sclip
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.user.sclip.sclip
+PRODUCT_BUNDLE_IDENTIFIER = com.erenkirkil.sclip
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.user.sclip. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 Eren Kırkıl. All rights reserved.
