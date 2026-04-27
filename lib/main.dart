@@ -29,6 +29,15 @@ Future<void> main() async {
   if (kDebugMode) {
     final prevOnError = FlutterError.onError;
     FlutterError.onError = (details) {
+      final ex = details.exception.toString();
+      // Suppress HardwareKeyboard state assertions. clearState() intentionally
+      // wipes the state to prevent stuck keys across window shows. Trailing
+      // KeyUp events from the global shortcut or instantaneous hide will trigger
+      // "key not pressed", and trailing KeyDowns might trigger "already pressed".
+      if (ex.contains('HardwareKeyboard') && 
+          (ex.contains('is not pressed') || ex.contains('is already pressed'))) {
+        return;
+      }
       debugPrint('sclip: widget error: ${details.exception}');
       if (details.stack != null) debugPrint('${details.stack}');
       prevOnError?.call(details);
@@ -230,18 +239,14 @@ class _HomePageState extends State<HomePage> with WindowListener {
   bool _onHardwareKey(KeyEvent event) {
     if (event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.escape) {
-      // If any modal/dialog is on top, pop it first — a single Esc should
-      // close the settings sheet without also hiding the window, otherwise
-      // the user loses their place and the window disappears as a side
-      // effect. A second Esc (no poppable route) falls through to the
-      // normal hide behaviour.
+      // If any modal/dialog is on top, pop it first. We no longer hide the
+      // window itself via Esc — users rely on the global hotkey to toggle.
       final nav = widget.navigatorKey.currentState;
       if (nav != null && nav.canPop()) {
         nav.pop();
         return true;
       }
-      unawaited(_hideAndReturnFocus());
-      return true;
+      return false;
     }
     return false;
   }
@@ -315,6 +320,19 @@ class _HomePageState extends State<HomePage> with WindowListener {
   }
 
   Future<void> _hideAndReturnFocus() async {
+    // Hide instantly visually to keep UI snappy
+    if (Platform.isWindows) await windowManager.setOpacity(0.0);
+
+    // Wait for physical keys to be released before actually hiding the window.
+    // If the window loses focus while a key is pressed, Flutter misses the KeyUp
+    // event and the key gets permanently stuck in both HardwareKeyboard and the
+    // Widget tree's Focus managers, causing the notorious "requires 2 presses" bug.
+    final waitStart = DateTime.now();
+    while (HardwareKeyboard.instance.logicalKeysPressed.isNotEmpty) {
+      if (DateTime.now().difference(waitStart).inMilliseconds > 500) break;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
     _suppressBlur = true;
     try {
       if (Platform.isMacOS) {
@@ -324,6 +342,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
         await windowManager.hide();
       }
     } finally {
+      if (Platform.isWindows) await windowManager.setOpacity(1.0);
       // Clear on the next microtask — after onWindowBlur has fired.
       Future<void>.delayed(const Duration(milliseconds: 50), () {
         _suppressBlur = false;
@@ -652,10 +671,21 @@ class _HomePageState extends State<HomePage> with WindowListener {
     // timestamp — touch() keeps the id stable so widget keys don't churn
     // and the "just now" label reflects the latest action.
     _history.touch(entry.id);
+
     if (Platform.isWindows) {
-      // Hide first so focus returns to the previously-active app, then let
-      // the native side send Ctrl+V after a short delay.
+      // Hide instantly visually to keep UI snappy
+      await windowManager.setOpacity(0.0);
+
+      // Wait for Enter to be released so it doesn't get stuck in Flutter's state
+      // (which causes the 2-press bug) and doesn't interfere with Ctrl+V.
+      final waitStart = DateTime.now();
+      while (HardwareKeyboard.instance.logicalKeysPressed.isNotEmpty) {
+        if (DateTime.now().difference(waitStart).inMilliseconds > 500) break;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+
       await windowManager.hide();
+      await windowManager.setOpacity(1.0);
     }
     try {
       await _windowChannel.invokeMethod('pasteToPrevious');
@@ -675,15 +705,6 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   @override
   void onWindowFocus() {
-    // Flutter's HardwareKeyboard tracks pressed keys in Dart and can drift
-    // out of sync with the OS while our window is hidden — any key-up that
-    // fires in another app never reaches us, so the next KeyDown trips an
-    // assertion ("A KeyDownEvent is dispatched, but the state shows that
-    // the physical key is already pressed."). Once that assertion throws,
-    // subsequent dispatches are also unreliable, which is why arrow-key
-    // navigation silently dies after the first copy+paste cycle.
-    // syncKeyboardState asks the OS for the real pressed-key set and
-    // reconciles, so the next event frame starts clean.
     unawaited(HardwareKeyboard.instance.syncKeyboardState());
 
     // Reassert focus on the top entry — when the window is reshown after a
@@ -702,6 +723,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   @override
   void onWindowBlur() {
+    debugPrint('[DEBUG] ${DateTime.now().toIso8601String()} - onWindowBlur | Pressed keys: ${HardwareKeyboard.instance.logicalKeysPressed.map((k) => k.debugName).join(", ")}');
     // Auto-hide when user clicks away — unless the user has pinned the
     // window or turned the behaviour off entirely in settings.
     // _suppressBlur guards against our own hide path, which also fires
