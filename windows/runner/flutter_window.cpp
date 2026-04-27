@@ -9,6 +9,7 @@
 #include <vector>
 #include <windows.h>
 #include <shellapi.h>
+#include <shlobj.h>
 
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
