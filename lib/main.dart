@@ -74,6 +74,21 @@ class SclipApp extends StatelessWidget {
   // for Material 3 — light/dark schemes derive harmonised tones from this.
   static const _brandSeed = Color(0xFF609D4F);
 
+  // Hoisted: the ListenableBuilder below fires on EVERY settings change
+  // (polling rate, max items, ...), and rebuilding two ColorScheme.fromSeed
+  // palettes per toggle is pure waste — only themeMode actually varies.
+  static final _lightTheme = ThemeData(
+    colorScheme: ColorScheme.fromSeed(seedColor: _brandSeed),
+    useMaterial3: true,
+  );
+  static final _darkTheme = ThemeData(
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: _brandSeed,
+      brightness: Brightness.dark,
+    ),
+    useMaterial3: true,
+  );
+
   final SettingsProvider settings;
 
   /// Exposed so the global Escape handler can pop any open modal before
@@ -90,17 +105,8 @@ class SclipApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         navigatorKey: navigatorKey,
         themeMode: settings.themeMode,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: _brandSeed),
-          useMaterial3: true,
-        ),
-        darkTheme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: _brandSeed,
-            brightness: Brightness.dark,
-          ),
-          useMaterial3: true,
-        ),
+        theme: _lightTheme,
+        darkTheme: _darkTheme,
         home: HomePage(settings: settings, navigatorKey: navigatorKey),
       ),
     );

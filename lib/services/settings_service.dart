@@ -38,18 +38,11 @@ class SettingsService {
 
   // ThemeMode stored as enum name (`system` / `light` / `dark`). Unknown
   // values fall back to system so a future schema downgrade doesn't crash.
-  ThemeMode get themeMode {
-    switch (_prefs.getString(_kThemeMode)) {
-      case 'light':
-        return ThemeMode.light;
-      case 'dark':
-        return ThemeMode.dark;
-      case 'system':
-      case null:
-      default:
-        return ThemeMode.system;
-    }
-  }
+  ThemeMode get themeMode => switch (_prefs.getString(_kThemeMode)) {
+    'light' => ThemeMode.light,
+    'dark' => ThemeMode.dark,
+    _ => ThemeMode.system,
+  };
 
   Future<void> setThemeMode(ThemeMode mode) =>
       _prefs.setString(_kThemeMode, mode.name);

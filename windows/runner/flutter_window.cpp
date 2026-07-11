@@ -453,13 +453,28 @@ bool FlutterWindow::OnCreate() {
           std::thread([target]() {
             if (target != nullptr && IsWindow(target)) {
               DWORD pid = 0;
-              GetWindowThreadProcessId(target, &pid);
-              // Grants our permission for the other process to come
-              // forward — required by SetForegroundWindow's policy.
+              DWORD target_thread = GetWindowThreadProcessId(target, &pid);
+              // Note the direction: this grants the TARGET process the
+              // right to call SetForegroundWindow itself — it does NOT
+              // authorize our own call below, which normally succeeds
+              // only via sclip's residual foreground rights right after
+              // hiding. Kept because some targets bounce focus through
+              // their own SetForegroundWindow on activation.
               if (pid != 0) {
                 AllowSetForegroundWindow(pid);
               }
-              SetForegroundWindow(target);
+              if (SetForegroundWindow(target) == 0) {
+                // Residual rights didn't cover us (e.g. focus moved in
+                // the race window). Standard clipboard-manager fallback:
+                // briefly attach to the target's input thread so the
+                // promotion counts as thread-local, then detach.
+                DWORD self_thread = GetCurrentThreadId();
+                if (target_thread != 0 && target_thread != self_thread &&
+                    AttachThreadInput(self_thread, target_thread, TRUE)) {
+                  SetForegroundWindow(target);
+                  AttachThreadInput(self_thread, target_thread, FALSE);
+                }
+              }
               // Short settle time — Windows needs a moment to actually
               // promote the window and update the focused thread queue.
               std::this_thread::sleep_for(std::chrono::milliseconds(60));

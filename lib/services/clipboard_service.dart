@@ -29,6 +29,7 @@ typedef FilesReader = Future<List<String>> Function();
 /// running super_clipboard, which would either fail to read the payload
 /// or, on macOS, destructively resolve a promise. A missing native
 /// handler is expressed as [ClipboardState.unavailable].
+@immutable
 class ClipboardState {
   const ClipboardState({
     required this.change,
@@ -381,18 +382,12 @@ class ClipboardService {
     }
   }
 
-  static String _extensionFor(ClipboardImageFormat format) {
-    switch (format) {
-      case ClipboardImageFormat.png:
-        return 'png';
-      case ClipboardImageFormat.jpeg:
-        return 'jpg';
-      case ClipboardImageFormat.gif:
-        return 'gif';
-      case ClipboardImageFormat.webp:
-        return 'webp';
-    }
-  }
+  static String _extensionFor(ClipboardImageFormat format) => switch (format) {
+    ClipboardImageFormat.png => 'png',
+    ClipboardImageFormat.jpeg => 'jpg',
+    ClipboardImageFormat.gif => 'gif',
+    ClipboardImageFormat.webp => 'webp',
+  };
 
   static void _addImageToItem(
     DataWriterItem item,
@@ -688,20 +683,13 @@ class ClipboardService {
     return filename.substring(dot + 1).toLowerCase();
   }
 
-  static ClipboardImageFormat _imageFormatForExtension(String ext) {
-    switch (ext) {
-      case 'jpg':
-      case 'jpeg':
-        return ClipboardImageFormat.jpeg;
-      case 'gif':
-        return ClipboardImageFormat.gif;
-      case 'webp':
-        return ClipboardImageFormat.webp;
-      case 'png':
-      default:
-        return ClipboardImageFormat.png;
-    }
-  }
+  static ClipboardImageFormat _imageFormatForExtension(String ext) =>
+      switch (ext) {
+        'jpg' || 'jpeg' => ClipboardImageFormat.jpeg,
+        'gif' => ClipboardImageFormat.gif,
+        'webp' => ClipboardImageFormat.webp,
+        _ => ClipboardImageFormat.png,
+      };
 
   static final _svgFormat = SimpleFileFormat(
     uniformTypeIdentifiers: ['public.svg-image'],
@@ -939,7 +927,9 @@ class ClipboardService {
         // path — the sanitizer is the only thing standing between us and
         // a malicious payload here.
         if (_looksLikeSvgXml(text)) {
-          final bytes = Uint8List.fromList(utf8.encode(text));
+          // utf8.encode already returns Uint8List since Dart 3 — a
+          // fromList wrapper would copy up to 20MB (SVG cap) for nothing.
+          final bytes = utf8.encode(text);
           if (isSafeSvgPayload(bytes)) {
             return ClipboardEntry.svg(text);
           }
@@ -988,18 +978,12 @@ class ClipboardService {
     return null;
   }
 
-  static FileFormat _formatFor(ClipboardImageFormat tag) {
-    switch (tag) {
-      case ClipboardImageFormat.png:
-        return Formats.png;
-      case ClipboardImageFormat.jpeg:
-        return Formats.jpeg;
-      case ClipboardImageFormat.gif:
-        return Formats.gif;
-      case ClipboardImageFormat.webp:
-        return Formats.webp;
-    }
-  }
+  static FileFormat _formatFor(ClipboardImageFormat tag) => switch (tag) {
+    ClipboardImageFormat.png => Formats.png,
+    ClipboardImageFormat.jpeg => Formats.jpeg,
+    ClipboardImageFormat.gif => Formats.gif,
+    ClipboardImageFormat.webp => Formats.webp,
+  };
 
   /// Watchdog for the async super_clipboard read callbacks. If a callback
   /// never fires (decode error routed past us, wedged native read), the

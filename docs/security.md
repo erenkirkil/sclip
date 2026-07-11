@@ -28,7 +28,11 @@ Raycast, Alfred, Maccy, Ditto — tüm clipboard yöneticileri aynı pattern'ı 
 ### Senaryo
 Saldırgan fiziksel disk erişimiyle swap dosyasını (`/var/vm/swapfile*` macOS, `pagefile.sys` Windows) okuyarak process heap'teki clipboard geçmişini kurtarabilir.
 
-### Durum: Kapsam dışı, belgelenmiş
+### Durum: Kapsam dışı, belgelenmiş — platforma göre risk farklı
+
+- **macOS: düşük risk.** Swap varsayılan olarak şifrelidir (reboot'ta atılan efemer anahtar); FileVault ile safe-sleep imajı da şifrelenir. Heap sayfalansa bile diskte şifreli kalır.
+- **Windows: BitLocker yoksa gerçek düz-metin kalıntı riski.** `pagefile.sys` ve `hiberfil.sys` (hazırda beklet) varsayılan olarak şifresizdir — bellek baskısı veya hibernation pano baytlarını diske düz yazabilir. **Kullanıcı notu:** Hassas içerikle çalışıyorsanız BitLocker'ı açın.
+- **Eviction sonrası zero'lama yok:** geçmişten düşen entry'lerin baytları GC'ye kadar heap'te kalır ve üzerine yazılmaz — Dart'ta GC-yönetimli buffer'ı zero'lamak için primitif yoktur. Bu, yukarıdaki paging riskinin süresini uzatır ama yüzeyini değiştirmez (canlı geçmiş de aynı heap'tedir).
 
 `mlock(2)` / `VirtualLock` ile heap sayfaları swap'tan kilitlenebilir; ancak bu Dart VM'nin tüm heap'ini kapsayamaz, yalnızca `ffi.malloc` ile ayrılan native belleği korur. Flutter object modelindeki `List<ClipboardEntry>` bu kapsama girmez.
 
@@ -74,7 +78,26 @@ URL tipi yalnızca `http`, `https`, `ftp`, `mailto` şemalarını kabul eder. `j
 
 ---
 
+## Risk 6 — Temp materializasyon (bilinçli RAM-only istisnası)
+
+### Senaryo
+SVG/PDF yapıştırma (dosya-URI companion) ve imageSet "hepsini yapıştır" yolları, dosya-handler hedeflerin (Telegram, Slack, Mail, Finder) yapıştırmayı kabul etmesi için içerik baytlarını geçici olarak `<tempDir>/sclip/<entryId>/` altına yazar; macOS NSFilePromise çözümlemesi de doğası gereği bir disk hedefi ister.
+
+### Durum: Kabul edilmiş, üç katmanlı temizlikle sınırlandırılmış
+
+1. Entry geçmişten düşünce per-entry silme (`HistoryProvider.onEvict`; canlı pano dosyayı hâlâ referans ediyorsa bir sonraki katmana ertelenir).
+2. Uygulama kapanışında `dispose()` prune'u.
+3. Bir sonraki açılışta `start()` prune'u (crash telafisi).
+
+`isSensitive` işaretli entry'lerde materializasyon **tamamen atlanır** — dosya-URI legi olmadan inline baytlar + plainText yayınlanır.
+
+**Kalan risk:** Crash ile kapanış arasında dosyalar diskte kalır (bir sonraki açılışa kadar). Bu istisna olmadan dosya-handler hedeflere SVG/PDF/imageSet yapıştırma çalışmaz — kabul edilmiş bir uyumluluk/ilke ödünüdür.
+
+---
+
 ## Bağımlılık güvenliği
+
+**Uygulama katmanı:** No-network garantisi macOS'ta **OS-zorlamalıdır** (Release entitlements'ta network yok — sandbox dışarı bağlantıyı reddeder). Windows'ta OS-seviyesi bir engel yoktur; garanti aşağıdaki bağımlılık denetimine dayanır. **Release gate:** Her bağımlılık güncellemesinde network kullanım grep'i tekrarlanmalıdır.
 
 | Paket | Network kullanımı? | Not |
 |---|---|---|

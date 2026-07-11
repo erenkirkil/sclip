@@ -52,9 +52,11 @@ Clipboard content is sensitive by nature, so sclip's threat model and mitigation
 - [`docs/security.md`](docs/security.md) — per-risk trade-off analysis (paste race, swap-dump, cooperative concealed flag, SVG entity expansion, URL schemes).
 
 Highlights:
-- SVG XXE defence rejects `<!DOCTYPE>`, `<!ENTITY>`, `xmlns:xi`, and oversized payloads before render. Test fixtures in [`test/fixtures/malicious_svg/`](test/fixtures/malicious_svg/).
+- SVG XXE defence rejects `<!DOCTYPE>`, `<!ENTITY>`, `xmlns:xi`, and oversized payloads (full-payload, case-insensitive scan) before render. Test fixtures in [`test/fixtures/malicious_svg/`](test/fixtures/malicious_svg/).
 - Paste race window (~120 ms) is verified — both platforms capture the target PID/HWND before hiding, and abort the keystroke injection if the foreground changed.
-- Network entitlement removed at the macOS build layer; CI checks for regressions.
+- No-network is OS-enforced on macOS (sandbox, no network entitlement); on Windows it rests on the audited dependency set — re-checked on every dependency bump.
+- One documented RAM-only exception: pasting SVG/PDF/image-sets materializes bytes to a temp dir for file-handler targets (Telegram, Finder). Cleaned per-entry on eviction, on quit, and on next launch; skipped entirely for concealed/sensitive entries. Details in `docs/security.md`.
+- On Windows without BitLocker, OS paging/hibernation can write process memory (including any clipboard manager's history) to disk in plaintext — enable BitLocker if you handle sensitive content.
 
 ## Architecture
 

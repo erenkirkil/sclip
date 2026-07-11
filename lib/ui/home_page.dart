@@ -624,9 +624,6 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   @override
   void onWindowBlur() {
-    debugPrint(
-      '[DEBUG] ${DateTime.now().toIso8601String()} - onWindowBlur | Pressed keys: ${HardwareKeyboard.instance.logicalKeysPressed.map((k) => k.debugName).join(", ")}',
-    );
     // Auto-hide when user clicks away — unless the user has pinned the
     // window or turned the behaviour off entirely in settings.
     // _suppressBlur guards against our own hide path, which also fires

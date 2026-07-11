@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 
 enum ClipboardEntryType {
   text,
@@ -17,6 +17,7 @@ enum ClipboardEntryType {
 
 enum ClipboardImageFormat { png, jpeg, gif, webp }
 
+@immutable
 class ClipboardEntry {
   ClipboardEntry._({
     required this.id,
@@ -195,7 +196,10 @@ class ClipboardEntry {
       id: _newId(),
       type: ClipboardEntryType.files,
       createdAt: DateTime.now(),
-      uris: files,
+      // Wrapped like the imageSet factory: the hash is snapshotted at
+      // construction, so aliasing the caller's mutable list would let
+      // content and contentHash silently drift apart.
+      uris: List.unmodifiable(files),
       isSensitive: isSensitive,
       contentHash: _hashText('f', joined),
     );
@@ -293,7 +297,7 @@ class ClipboardEntry {
   }
 
   /// 64-bit truncation of SHA-256 over `prefix:value`. Collision probability
-  /// at history size 30 is negligible (~ 2.4e-15) and 16-char strings are
+  /// at history size 30 is negligible (≈ 2.4e-17) and 16-char strings are
   /// cheap to compare / store.
   static String _hashText(String prefix, String value) {
     final bytes = utf8.encode('$prefix:$value');

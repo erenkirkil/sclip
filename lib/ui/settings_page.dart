@@ -292,22 +292,14 @@ class _SettingsPageState extends State<SettingsPage> {
     return parts.join(' + ');
   }
 
-  static String _modLabel(HotKeyModifier m) {
-    switch (m) {
-      case HotKeyModifier.meta:
-        return 'Cmd';
-      case HotKeyModifier.control:
-        return 'Ctrl';
-      case HotKeyModifier.alt:
-        return 'Alt';
-      case HotKeyModifier.shift:
-        return 'Shift';
-      case HotKeyModifier.capsLock:
-        return 'CapsLock';
-      case HotKeyModifier.fn:
-        return 'Fn';
-    }
-  }
+  static String _modLabel(HotKeyModifier m) => switch (m) {
+    HotKeyModifier.meta => 'Cmd',
+    HotKeyModifier.control => 'Ctrl',
+    HotKeyModifier.alt => 'Alt',
+    HotKeyModifier.shift => 'Shift',
+    HotKeyModifier.capsLock => 'CapsLock',
+    HotKeyModifier.fn => 'Fn',
+  };
 }
 
 class _SectionHeader extends StatelessWidget {

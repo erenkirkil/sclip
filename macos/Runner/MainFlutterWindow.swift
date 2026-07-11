@@ -8,6 +8,33 @@ import FlutterMacOS
 // Mirrors the Windows g_paste_target / captureForeground pattern.
 private var capturedFrontmostPid: pid_t?
 
+// Publishes [urls] as minimal per-item `public.file-url` NSPasteboardItems
+// plus the legacy NSFilenamesPboardType combined list on item 0. Shared by
+// writeFiles and the post-promise republish so every clipboard sclip hands
+// back has the identical curated layout: `pb.writeObjects([NSURL])` would
+// attach `public.url` siblings that Telegram's drop handler chokes on and
+// would omit the companion Finder's "Edit > Paste Item" requires.
+private func publishFileUrls(_ urls: [URL], to pb: NSPasteboard) {
+  let paths = urls.map { $0.path }
+  let fileURLType = NSPasteboard.PasteboardType("public.file-url")
+  let filenamesType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
+  pb.clearContents()
+  var items: [NSPasteboardItem] = []
+  for (index, url) in urls.enumerated() {
+    let item = NSPasteboardItem()
+    item.setString(url.absoluteString, forType: fileURLType)
+    if index == 0 {
+      // NSFilenamesPboardType is a pasteboard-level combined list (read
+      // by Finder via pb.propertyList(forType:)); writing it on item 0
+      // satisfies that read without polluting per-item data for apps
+      // that iterate items individually.
+      item.setPropertyList(paths, forType: filenamesType)
+    }
+    items.append(item)
+  }
+  pb.writeObjects(items)
+}
+
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -155,10 +182,10 @@ class MainFlutterWindow: NSWindow {
         group.notify(queue: .main) {
           if !resolved.isEmpty {
             // Source pasteboard is now spent — its promise is consumed.
-            // Republish resolved URLs as plain file references so the
-            // user's clipboard is still useful afterwards.
-            pb.clearContents()
-            pb.writeObjects(resolved.map { $0 as NSURL })
+            // Republish resolved URLs so the user's clipboard is still
+            // useful afterwards, using the same curated layout as
+            // writeFiles (see publishFileUrls).
+            publishFileUrls(resolved, to: pb)
           }
           result(resolved.map { $0.path })
         }
@@ -184,24 +211,7 @@ class MainFlutterWindow: NSWindow {
           result(nil)
           return
         }
-        let urls = cleanedPaths.map { URL(fileURLWithPath: $0) }
-        let fileURLType = NSPasteboard.PasteboardType("public.file-url")
-        let filenamesType = NSPasteboard.PasteboardType("NSFilenamesPboardType")
-        pb.clearContents()
-        var items: [NSPasteboardItem] = []
-        for (index, url) in urls.enumerated() {
-          let item = NSPasteboardItem()
-          item.setString(url.absoluteString, forType: fileURLType)
-          if index == 0 {
-            // NSFilenamesPboardType is a pasteboard-level combined list
-            // (read by Finder via pb.propertyList(forType:)); writing it
-            // on item 0 satisfies that read without polluting per-item
-            // data for apps that iterate items individually.
-            item.setPropertyList(cleanedPaths, forType: filenamesType)
-          }
-          items.append(item)
-        }
-        pb.writeObjects(items)
+        publishFileUrls(cleanedPaths.map { URL(fileURLWithPath: $0) }, to: pb)
         result(nil)
       case "isAccessibilityTrusted":
         // Cmd+V posting via CGEvent requires Accessibility permission.
