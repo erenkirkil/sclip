@@ -12,6 +12,7 @@ class ClipboardEntryTile extends StatefulWidget {
     required this.entry,
     required this.onTap,
     required this.onDelete,
+    this.onTapPlain,
     this.onOpen,
     this.onImageTap,
     this.onPasteAll,
@@ -21,6 +22,10 @@ class ClipboardEntryTile extends StatefulWidget {
 
   final ClipboardEntry entry;
   final VoidCallback onTap;
+
+  /// "Paste as plain text" — triggered by Shift+click / Shift+Enter on
+  /// entries that have a text representation. Null hides the affordance.
+  final VoidCallback? onTapPlain;
   final VoidCallback onDelete;
   final VoidCallback? onOpen;
 
@@ -180,6 +185,15 @@ class _ClipboardEntryTileState extends State<ClipboardEntryTile> {
             _tileFocus.requestFocus();
           }
         },
+        // Shift+Enter: paste as plain text. Plain Enter stays with
+        // ListTile's default activation (SingleActivator matches
+        // modifier-less only, so the two never collide).
+        if (widget.onTapPlain != null)
+          const SingleActivator(LogicalKeyboardKey.enter, shift: true): () {
+            if (FocusManager.instance.primaryFocus == _tileFocus) {
+              widget.onTapPlain!();
+            }
+          },
       },
       // ListenableBuilder so the focus ring below tracks keyboard focus —
       // the 18%-alpha focusColor tint alone is ~1.3:1 against the resting
@@ -206,7 +220,15 @@ class _ClipboardEntryTileState extends State<ClipboardEntryTile> {
           ),
           minLeadingWidth: 0,
           horizontalTitleGap: 14,
-          onTap: widget.onTap,
+          onTap: () {
+            // Shift+click = paste as plain text (markup stripped).
+            if (widget.onTapPlain != null &&
+                HardwareKeyboard.instance.isShiftPressed) {
+              widget.onTapPlain!();
+            } else {
+              widget.onTap();
+            }
+          },
           leading: _Leading(entry: widget.entry),
           title: Text(
             widget.entry.preview,

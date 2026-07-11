@@ -32,6 +32,7 @@ class ClipboardEntry {
     this.uris,
     this.pdfBytes,
     this.richTextHtml,
+    this.rtfBytes,
     this.isSensitive = false,
   });
 
@@ -60,6 +61,15 @@ class ClipboardEntry {
   /// formatting (`Formats.htmlText` plus `Formats.plainText`).
   final String? richTextHtml;
 
+  /// RTF companion for [ClipboardEntryType.richText], captured when the
+  /// source published one (Word, Pages, TextEdit). Written back alongside
+  /// HTML + plain so RTF-first targets (Word, older editors) paste with
+  /// full fidelity instead of falling back to the HTML→internal
+  /// conversion. Deliberately excluded from [contentHash] — it's a
+  /// fidelity companion, and hashing it would make dedup depend on which
+  /// app produced the copy.
+  final Uint8List? rtfBytes;
+
   final bool isSensitive;
 
   /// Short SHA-256 fingerprint of the content. Used for dedup across the
@@ -79,13 +89,21 @@ class ClipboardEntry {
     );
   }
 
-  factory ClipboardEntry.url(Uri uri, {bool isSensitive = false}) {
+  /// [displayText] overrides what the tile shows and what a plain re-copy
+  /// pastes — used for detected emails/phones where the entry's action URI
+  /// is a synthesized `mailto:`/`tel:` but the user copied the bare
+  /// address. The hash stays on the URI so re-copies dedup regardless.
+  factory ClipboardEntry.url(
+    Uri uri, {
+    String? displayText,
+    bool isSensitive = false,
+  }) {
     final s = uri.toString();
     return ClipboardEntry._(
       id: _newId(),
       type: ClipboardEntryType.url,
       createdAt: DateTime.now(),
-      text: s,
+      text: displayText ?? s,
       uris: [uri],
       isSensitive: isSensitive,
       contentHash: _hashText('u', s),
@@ -175,6 +193,7 @@ class ClipboardEntry {
   factory ClipboardEntry.richText({
     required String plainText,
     required String html,
+    Uint8List? rtfBytes,
     bool isSensitive = false,
   }) {
     return ClipboardEntry._(
@@ -183,6 +202,9 @@ class ClipboardEntry {
       createdAt: DateTime.now(),
       text: plainText,
       richTextHtml: html,
+      // rtfBytes is a fidelity companion and intentionally NOT hashed
+      // (see field doc) — dedup must not depend on the source app.
+      rtfBytes: rtfBytes,
       isSensitive: isSensitive,
       // Hash both so two snippets that render the same plain text but
       // differ in markup don't collide and silently swallow the second copy.
@@ -220,6 +242,7 @@ class ClipboardEntry {
     uris: uris,
     pdfBytes: pdfBytes,
     richTextHtml: richTextHtml,
+    rtfBytes: rtfBytes,
     isSensitive: isSensitive,
     contentHash: contentHash,
   );
@@ -341,16 +364,28 @@ class ClipboardEntry {
     return 'is:${images.length}:$combined';
   }
 
+  // The 4-digit #RGBA shorthand REQUIRES the leading # — bare 4-char hex
+  // words ("beef", "cafe", "ff00") are ordinary text far too often.
   static final RegExp _hexColorRe = RegExp(
-    r'^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$',
+    r'^(#[0-9a-fA-F]{4}|#?(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8}))$',
   );
   static final RegExp _rgbColorRe = RegExp(
     r'^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(?:,\s*(?:0|1|0?\.\d+)\s*)?\)$',
     caseSensitive: false,
   );
 
-  /// Parses the stored color text into ARGB32. Returns null if not a color entry
-  /// or cannot be parsed. Supports #RGB, #RRGGBB, #RRGGBBAA and rgb()/rgba().
+  /// Comma-separated hsl()/hsla() (CSS legacy syntax — the form design
+  /// tools copy). Named colors ('red') are deliberately unsupported:
+  /// single English words as clipboard text would false-positive
+  /// constantly.
+  static final RegExp _hslColorRe = RegExp(
+    r'^hsla?\(\s*\d{1,3}(?:\.\d+)?(?:deg)?\s*,\s*\d{1,3}(?:\.\d+)?%\s*,\s*\d{1,3}(?:\.\d+)?%\s*(?:,\s*(?:0|1|0?\.\d+)\s*)?\)$',
+    caseSensitive: false,
+  );
+
+  /// Parses the stored color text into ARGB32. Returns null if not a color
+  /// entry or cannot be parsed. Supports #RGB, #RGBA, #RRGGBB, #RRGGBBAA,
+  /// rgb()/rgba() and hsl()/hsla().
   int? toArgb32() {
     if (type != ClipboardEntryType.color) return null;
     final raw = (text ?? '').trim();
@@ -358,7 +393,8 @@ class ClipboardEntry {
 
     if (raw.startsWith('#')) {
       var hex = raw.substring(1);
-      if (hex.length == 3) {
+      if (hex.length == 3 || hex.length == 4) {
+        // #RGB → #RRGGBB, #RGBA → #RRGGBBAA (CSS shorthand doubling).
         hex = hex.split('').map((c) => '$c$c').join();
       }
       if (hex.length == 6) {
@@ -372,6 +408,10 @@ class ClipboardEntry {
         return (a << 24) | rgb;
       }
       return null;
+    }
+
+    if (raw.toLowerCase().startsWith('hsl')) {
+      return _hslToArgb32(raw);
     }
 
     final rgb = RegExp(r'\d{1,3}|0?\.\d+').allMatches(raw).toList();
@@ -388,18 +428,91 @@ class ClipboardEntry {
     return (a << 24) | (r << 16) | (g << 8) | b;
   }
 
+  /// Standard CSS HSL→RGB conversion for a legacy-syntax hsl()/hsla()
+  /// string that already matched [_hslColorRe].
+  static int? _hslToArgb32(String raw) {
+    final nums = RegExp(
+      r'\d{1,3}(?:\.\d+)?|0?\.\d+',
+    ).allMatches(raw).map((m) => m.group(0)!).toList();
+    if (nums.length < 3) return null;
+    final h = (double.parse(nums[0]) % 360) / 360;
+    final s = (double.parse(nums[1]) / 100).clamp(0.0, 1.0);
+    final l = (double.parse(nums[2]) / 100).clamp(0.0, 1.0);
+    var a = 255;
+    if (nums.length >= 4) {
+      a = ((double.tryParse(nums[3]) ?? 1.0) * 255).round().clamp(0, 255);
+    }
+
+    double hueToRgb(double p, double q, double t) {
+      var tt = t;
+      if (tt < 0) tt += 1;
+      if (tt > 1) tt -= 1;
+      if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+      if (tt < 1 / 2) return q;
+      if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+      return p;
+    }
+
+    final double r, g, b;
+    if (s == 0) {
+      r = g = b = l;
+    } else {
+      final q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      final p = 2 * l - q;
+      r = hueToRgb(p, q, h + 1 / 3);
+      g = hueToRgb(p, q, h);
+      b = hueToRgb(p, q, h - 1 / 3);
+    }
+    return (a << 24) |
+        ((r * 255).round().clamp(0, 255) << 16) |
+        ((g * 255).round().clamp(0, 255) << 8) |
+        (b * 255).round().clamp(0, 255);
+  }
+
   static bool looksLikeColor(String value) {
     final v = value.trim();
     if (v.isEmpty) return false;
-    return _hexColorRe.hasMatch(v) || _rgbColorRe.hasMatch(v);
+    return _hexColorRe.hasMatch(v) ||
+        _rgbColorRe.hasMatch(v) ||
+        _hslColorRe.hasMatch(v);
   }
 
   static String normalizeHexColor(String value) {
     var v = value.trim();
-    if (_rgbColorRe.hasMatch(v)) return v.toLowerCase();
+    if (_rgbColorRe.hasMatch(v) || _hslColorRe.hasMatch(v)) {
+      return v.toLowerCase();
+    }
     if (!v.startsWith('#')) v = '#$v';
     return v.toLowerCase();
   }
+
+  /// Bare email address (no scheme): single line, one @, dotted TLD.
+  /// Explicit `mailto:` URIs are already handled by [looksLikeUrl].
+  static final RegExp _emailRe = RegExp(
+    r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$',
+  );
+
+  static bool looksLikeEmail(String value) {
+    final v = value.trim();
+    return v.isNotEmpty && _emailRe.hasMatch(v);
+  }
+
+  /// International phone number. Deliberately strict — MUST start with
+  /// `+` and country code: bare digit runs ('2024', order numbers, PINs)
+  /// would otherwise false-positive constantly.
+  static final RegExp _phoneRe = RegExp(r'^\+[1-9][0-9 ().\-]{6,18}$');
+
+  static bool looksLikePhone(String value) {
+    final v = value.trim();
+    if (!_phoneRe.hasMatch(v)) return false;
+    final digits = v.replaceAll(RegExp(r'[^0-9]'), '');
+    // E.164: country code + subscriber, 8-15 digits total.
+    return digits.length >= 8 && digits.length <= 15;
+  }
+
+  /// Digits-only (plus leading +) form for a `tel:` URI.
+  static String normalizePhone(String value) =>
+      '+${value.replaceAll(RegExp(r'[^0-9]'), '')}';
 
   static bool looksLikeUrl(String value) {
     final trimmed = value.trim();

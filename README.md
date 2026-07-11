@@ -118,6 +118,7 @@ For a signed + notarised DMG (requires an Apple Developer Program membership), s
 | ↑ / ↓ | Move between entries |
 | ← / → | Move between row actions (open / paste-all / delete) |
 | Enter | Copy + paste into previous app |
+| Shift+Enter / Shift+Click | Paste as plain text (markup stripped) |
 | Delete / Backspace | Remove entry |
 | Esc | Hide panel |
 

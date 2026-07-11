@@ -552,8 +552,16 @@ class _HomePageState extends State<HomePage> with WindowListener {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  Future<void> _onEntryTap(ClipboardEntry entry, {int? imageIndex}) async {
-    await _service.writeBack(entry, imageIndex: imageIndex);
+  Future<void> _onEntryTap(
+    ClipboardEntry entry, {
+    int? imageIndex,
+    bool plainOnly = false,
+  }) async {
+    await _service.writeBack(
+      entry,
+      imageIndex: imageIndex,
+      plainOnly: plainOnly,
+    );
     // Re-using an existing entry should bump it to the top with a fresh
     // timestamp — touch() keeps the id stable so widget keys don't churn
     // and the "just now" label reflects the latest action.

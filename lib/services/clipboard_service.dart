@@ -108,9 +108,34 @@ class ClipboardService {
   /// in the set is written as its own clipboard item (multi-item payload);
   /// when provided, only that single image is written so a plain Cmd/Ctrl+V
   /// into an app that only accepts one item still gets the intended image.
-  Future<void> writeBack(ClipboardEntry entry, {int? imageIndex}) async {
+  ///
+  /// [plainOnly] publishes ONLY the plain-text representation — the
+  /// classic "paste as plain text": a richText entry loses its markup, an
+  /// SVG pastes as raw XML. Entries without a text representation
+  /// (image/pdf/files) fall through to the full-fidelity path.
+  Future<void> writeBack(
+    ClipboardEntry entry, {
+    int? imageIndex,
+    bool plainOnly = false,
+  }) async {
     final clipboard = SystemClipboard.instance;
     if (clipboard == null) return;
+
+    if (plainOnly) {
+      final value = entry.text ?? '';
+      if (value.isNotEmpty) {
+        final plainItem = DataWriterItem()..add(Formats.plainText(value));
+        await clipboard.write([plainItem]);
+        // The published payload IS a plain-text entry now — sign it as
+        // such so the next tick's dedup suppresses self-ingestion (the
+        // entry's own hash covers its full-fidelity representation).
+        _lastSignature = ClipboardEntry.text(value).contentHash;
+        await _captureWriteChange();
+        return;
+      }
+      // No text representation — full fidelity is the only option.
+    }
+
     final item = DataWriterItem();
     switch (entry.type) {
       case ClipboardEntryType.text:
@@ -260,6 +285,13 @@ class ClipboardService {
         }
         if (html.isNotEmpty) {
           item.add(Formats.htmlText(html));
+        }
+        // RTF companion (when the source published one): RTF-first
+        // targets — Word, Pages, older editors — paste with native
+        // fidelity instead of converting from HTML.
+        final rtf = entry.rtfBytes;
+        if (rtf != null && rtf.isNotEmpty) {
+          item.add(_rtfFormat(rtf));
         }
         break;
     }
@@ -919,6 +951,23 @@ class ClipboardService {
         if (ClipboardEntry.looksLikeColor(text)) {
           return ClipboardEntry.color(text);
         }
+        // Bare emails / international phone numbers get the url entry's
+        // "Aç" action (mailto:/tel:) while the tile and any re-paste keep
+        // the text exactly as copied (displayText).
+        if (ClipboardEntry.looksLikeEmail(text)) {
+          final bare = text.trim();
+          return ClipboardEntry.url(
+            Uri.parse('mailto:$bare'),
+            displayText: bare,
+          );
+        }
+        if (ClipboardEntry.looksLikePhone(text)) {
+          final bare = text.trim();
+          return ClipboardEntry.url(
+            Uri.parse('tel:${ClipboardEntry.normalizePhone(bare)}'),
+            displayText: bare,
+          );
+        }
         // SVG XML pasted as plain text (browser "View Source" copy, code
         // editors) doesn't carry the public.svg-image UTI, so the binary
         // SVG branch above misses it. Recognise the markup directly so the
@@ -943,7 +992,11 @@ class ClipboardService {
               html.isNotEmpty &&
               html != text &&
               html.length <= _maxTextChars) {
-            return ClipboardEntry.richText(plainText: text, html: html);
+            return ClipboardEntry.richText(
+              plainText: text,
+              html: html,
+              rtfBytes: await _readRtfCompanion(item),
+            );
           }
         }
         return ClipboardEntry.text(text);
@@ -962,7 +1015,11 @@ class ClipboardService {
             .replaceAll(RegExp(r'\s+'), ' ')
             .trim();
         if (stripped.isNotEmpty) {
-          return ClipboardEntry.richText(plainText: stripped, html: html);
+          return ClipboardEntry.richText(
+            plainText: stripped,
+            html: html,
+            rtfBytes: await _readRtfCompanion(item),
+          );
         }
       }
     }
@@ -976,6 +1033,19 @@ class ClipboardService {
     }
 
     return null;
+  }
+
+  /// Reads the RTF flavor when the item advertises one, capped at the
+  /// same per-entry limit as text/HTML. Returns null (drop the companion,
+  /// keep the entry) on absence or oversize — RTF is a paste-fidelity
+  /// bonus for Word/Pages-style targets, never the payload itself.
+  Future<Uint8List?> _readRtfCompanion(ClipboardDataReader item) async {
+    if (!item.canProvide(_rtfFormat)) return null;
+    final bytes = await _readBinary(item, _rtfFormat);
+    if (bytes == null || bytes.isEmpty || bytes.length > _maxTextChars) {
+      return null;
+    }
+    return bytes;
   }
 
   static FileFormat _formatFor(ClipboardImageFormat tag) => switch (tag) {

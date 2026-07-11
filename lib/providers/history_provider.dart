@@ -159,7 +159,9 @@ class HistoryProvider extends ChangeNotifier {
     ClipboardEntryType.pdf => e.pdfBytes?.lengthInBytes ?? 0,
     ClipboardEntryType.svg => _stringWeight(e.text?.length),
     ClipboardEntryType.richText => _stringWeight(
-      (e.text?.length ?? 0) + (e.richTextHtml?.length ?? 0),
+      (e.text?.length ?? 0) +
+          (e.richTextHtml?.length ?? 0) +
+          (e.rtfBytes?.lengthInBytes ?? 0),
     ),
     ClipboardEntryType.text => _stringWeight(e.text?.length),
     // URI lists and short parsed strings — negligible by construction.

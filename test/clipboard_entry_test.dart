@@ -69,6 +69,91 @@ void main() {
       expect(e4.toArgb32(), 0xFF0000FF);
     });
 
+    test('looksLikeColor: #RGBA shorthand needs #, hsl()/hsla() accepted', () {
+      expect(ClipboardEntry.looksLikeColor('#f00a'), isTrue);
+      // Bare 4-char hex is ordinary text ("beef", "cafe") — must reject.
+      expect(ClipboardEntry.looksLikeColor('f00a'), isFalse);
+      expect(ClipboardEntry.looksLikeColor('beef'), isFalse);
+      expect(ClipboardEntry.looksLikeColor('hsl(120, 50%, 50%)'), isTrue);
+      expect(
+        ClipboardEntry.looksLikeColor('hsla(240, 100%, 50%, 0.5)'),
+        isTrue,
+      );
+      expect(ClipboardEntry.looksLikeColor('hsl(120, 50, 50)'), isFalse);
+    });
+
+    test('#RGBA and hsl()/hsla() parse to ARGB', () {
+      // #RGBA: alpha last, shorthand doubling → #ff000088.
+      expect(ClipboardEntry.color('#f008').toArgb32(), 0x88FF0000);
+      // Pure green: hsl(120, 100%, 50%) → 00ff00.
+      expect(
+        ClipboardEntry.color('hsl(120, 100%, 50%)').toArgb32(),
+        0xFF00FF00,
+      );
+      // Achromatic grey: s=0 → l drives all channels.
+      expect(ClipboardEntry.color('hsl(0, 0%, 50%)').toArgb32(), 0xFF808080);
+      // Alpha leg on hsla.
+      expect(
+        ClipboardEntry.color('hsla(240, 100%, 50%, 0.5)').toArgb32(),
+        0x800000FF,
+      );
+    });
+
+    test('looksLikeEmail accepts bare addresses, rejects noise', () {
+      expect(ClipboardEntry.looksLikeEmail('a@b.com'), isTrue);
+      expect(
+        ClipboardEntry.looksLikeEmail('user.name+tag@sub.domain.org'),
+        isTrue,
+      );
+      expect(ClipboardEntry.looksLikeEmail('mailto:a@b.com'), isFalse);
+      expect(ClipboardEntry.looksLikeEmail('not an email'), isFalse);
+      expect(ClipboardEntry.looksLikeEmail('a@b'), isFalse);
+      expect(ClipboardEntry.looksLikeEmail('a@b.com extra'), isFalse);
+    });
+
+    test('looksLikePhone requires + and E.164 digit count', () {
+      expect(ClipboardEntry.looksLikePhone('+90 532 123 45 67'), isTrue);
+      expect(ClipboardEntry.looksLikePhone('+1 (555) 010-9999'), isTrue);
+      // No leading + → too many false positives (PINs, order numbers).
+      expect(ClipboardEntry.looksLikePhone('0532 123 45 67'), isFalse);
+      expect(ClipboardEntry.looksLikePhone('+90 123'), isFalse);
+      expect(ClipboardEntry.looksLikePhone('+123456789012345678'), isFalse);
+      expect(
+        ClipboardEntry.normalizePhone('+90 (532) 123-45-67'),
+        '+905321234567',
+      );
+    });
+
+    test('url displayText keeps bare text while hashing the URI', () {
+      final e = ClipboardEntry.url(
+        Uri.parse('mailto:a@b.com'),
+        displayText: 'a@b.com',
+      );
+      expect(e.text, 'a@b.com');
+      expect(e.uris?.first.scheme, 'mailto');
+      // Same URI without displayText → same hash (dedup on the URI).
+      expect(
+        e.contentHash,
+        ClipboardEntry.url(Uri.parse('mailto:a@b.com')).contentHash,
+      );
+    });
+
+    test('richText carries optional rtf companion outside the hash', () {
+      final withRtf = ClipboardEntry.richText(
+        plainText: 'hi',
+        html: '<b>hi</b>',
+        rtfBytes: Uint8List.fromList([1, 2, 3]),
+      );
+      final withoutRtf = ClipboardEntry.richText(
+        plainText: 'hi',
+        html: '<b>hi</b>',
+      );
+      expect(withRtf.rtfBytes, isNotNull);
+      expect(withRtf.touched().rtfBytes, withRtf.rtfBytes);
+      // Fidelity companion must not affect dedup.
+      expect(withRtf.contentHash, withoutRtf.contentHash);
+    });
+
     test('ids are unique', () {
       final ids = List.generate(50, (_) => ClipboardEntry.text('a').id);
       expect(ids.toSet().length, ids.length);

@@ -18,7 +18,11 @@ class HistoryList extends StatefulWidget {
   });
 
   final HistoryProvider provider;
-  final Future<void> Function(ClipboardEntry entry, {int? imageIndex})
+  final Future<void> Function(
+    ClipboardEntry entry, {
+    int? imageIndex,
+    bool plainOnly,
+  })
   onEntryTap;
   final Future<void> Function(ClipboardEntry entry) onEntryOpen;
   final FocusNode? firstItemFocusNode;
@@ -122,6 +126,10 @@ class _HistoryListState extends State<HistoryList> {
                     autofocus: i == 0,
                     focusNode: i == 0 ? widget.firstItemFocusNode : null,
                     onTap: () => widget.onEntryTap(e),
+                    // Shift+tık / Shift+Enter: düz metin olarak yapıştır.
+                    onTapPlain: (e.text?.isNotEmpty ?? false)
+                        ? () => widget.onEntryTap(e, plainOnly: true)
+                        : null,
                     onImageTap: e.type == ClipboardEntryType.imageSet
                         ? (index) => widget.onEntryTap(e, imageIndex: index)
                         : null,
