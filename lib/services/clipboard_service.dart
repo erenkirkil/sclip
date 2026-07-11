@@ -147,6 +147,26 @@ class ClipboardService {
         final formats = entry.imagesFormats;
         if (bytes == null || bytes.isEmpty) return;
         if (imageIndex == null) {
+          if (entry.isSensitive) {
+            // Sensitive entries must never touch the disk — skip the
+            // temp-file CF_HDROP / NSURL companion and publish the images
+            // as inline multi-item data instead. Most targets collapse a
+            // multi-item image payload to the first item under Cmd/Ctrl+V;
+            // the per-thumbnail paste path covers the rest.
+            final items = <DataWriterItem>[];
+            for (var i = 0; i < bytes.length; i++) {
+              final fmt = (formats != null && i < formats.length)
+                  ? formats[i]
+                  : ClipboardImageFormat.png;
+              final it = DataWriterItem();
+              _addImageToItem(it, bytes[i], fmt);
+              items.add(it);
+            }
+            await clipboard.write(items);
+            _lastSignature = entry.contentHash;
+            await _captureWriteChange();
+            return;
+          }
           // Paste-all: write each image to a temp file and publish via the
           // native CF_HDROP / NSURL writeObjects path so Finder / Explorer
           // light up alongside file-handler apps (Telegram, Slack, Mail).
@@ -275,6 +295,10 @@ class ClipboardService {
     List<int> bytes,
     String extension,
   ) async {
+    // Sensitive content must never be written to disk — the file URI leg
+    // is a fidelity bonus, not a requirement; targets fall back to the
+    // inline bytes / plainText legs published alongside it.
+    if (entry.isSensitive) return null;
     try {
       final base = await getTemporaryDirectory();
       final dir = Directory('${base.path}/sclip/${entry.id}');
@@ -470,6 +494,29 @@ class ClipboardService {
   Future<void> dispose() async {
     stop();
     await _controller.close();
+    // Sweep materialized temp files on graceful shutdown — without this,
+    // pasted SVG/PDF/imageSet content would sit on disk until the NEXT
+    // launch's start() prune.
+    await _pruneTempDir();
+  }
+
+  /// Deletes the per-entry temp directory created by writeBack
+  /// materialization once [entry] permanently leaves the history. Skipped
+  /// while the entry's content is still our most recent clipboard write:
+  /// the OS clipboard may reference the file URIs, and the imageSet
+  /// paste-all dedup re-reads those files on the next tick. Such leftovers
+  /// are swept by [_pruneTempDir] on shutdown / next start instead.
+  Future<void> cleanupEntryTempFiles(ClipboardEntry entry) async {
+    if (entry.contentHash == _lastSignature) return;
+    try {
+      final base = await getTemporaryDirectory();
+      final dir = Directory('${base.path}/sclip/${entry.id}');
+      if (dir.existsSync()) {
+        dir.deleteSync(recursive: true);
+      }
+    } catch (e) {
+      debugPrint('sclip: entry temp cleanup failed: $e');
+    }
   }
 
   Future<void> _tick() async {
@@ -564,9 +611,11 @@ class ClipboardService {
   /// shells that publish CF_HDROP / NSURL (Finder, Explorer, Photos).
   static const _imageFileExtensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'};
 
-  /// Per-file size guard for the file → image conversion. Mirrors the
-  /// HistoryProvider default `maxImageBytes` (5 MiB) so we don't waste
-  /// I/O reading bytes that the history layer would drop anyway.
+  /// Size guard for the file → image conversion, applied both per file and
+  /// to the running TOTAL of the set. Mirrors the HistoryProvider default
+  /// `maxImageBytes` (5 MiB), which caps the imageSet *total* — checking
+  /// only per-file here would burn I/O and hashing on a set the history
+  /// layer silently drops (e.g. two 3 MB PNGs).
   static const _maxImageInjectBytes = 5 * 1024 * 1024;
 
   /// Builds the richest entry for a list of file paths. When every path
@@ -588,11 +637,19 @@ class ClipboardService {
       formats.add(_imageFormatForExtension(ext));
     }
     final bytesList = <Uint8List>[];
+    var totalBytes = 0;
     for (final p in paths) {
       try {
         final f = File(p);
         final stat = await f.stat();
         if (stat.size <= 0 || stat.size > _maxImageInjectBytes) {
+          return filesFallback();
+        }
+        // Bail to the files fallback BEFORE reading bytes the history
+        // layer's set-total cap would silently drop — the user still sees
+        // the file list and can paste it.
+        totalBytes += stat.size;
+        if (totalBytes > _maxImageInjectBytes) {
           return filesFallback();
         }
         final bytes = await f.readAsBytes();
@@ -639,6 +696,19 @@ class ClipboardService {
   static final _svgFormat = SimpleFileFormat(
     uniformTypeIdentifiers: ['public.svg-image'],
     mimeTypes: ['image/svg+xml'],
+  );
+
+  /// RTF pasteboard flavor. Used only as a *probe* (never read): rich
+  /// document editors (Word, Pages, TextEdit) publish RTF alongside plain
+  /// text when copying text, while image/PDF-first sources (browsers,
+  /// Preview, Finder) don't — so plainText+RTF together identifies a
+  /// "text copied from a rich editor" payload. Formats.rtf can't be used
+  /// here: on Windows it falls back to the 'application/rtf' MIME name,
+  /// but the actual registered clipboard format is 'Rich Text Format'.
+  static final _rtfFormat = SimpleFileFormat(
+    uniformTypeIdentifiers: ['public.rtf'],
+    windowsFormats: ['Rich Text Format'],
+    mimeTypes: ['text/rtf', 'application/rtf'],
   );
 
   /// Hard cap for SVG payloads. Real vector assets from Figma/Illustrator
@@ -712,6 +782,19 @@ class ClipboardService {
     if (classified.length == 1) return classified.first;
 
     if (classified.every((e) => e.type == ClipboardEntryType.image)) {
+      // HistoryProvider caps the imageSet TOTAL at its image cap; a set
+      // over the limit would be silently dropped there. Collapsing to the
+      // first image that fits keeps *something* in history instead.
+      final total = classified.fold<int>(
+        0,
+        (s, e) => s + e.imageBytes!.lengthInBytes,
+      );
+      if (total > _maxImageInjectBytes) {
+        for (final e in classified) {
+          if (e.imageBytes!.lengthInBytes <= _maxImageInjectBytes) return e;
+        }
+        return classified.first;
+      }
       return ClipboardEntry.imageSet(
         [for (final e in classified) e.imageBytes!],
         formats: [
@@ -747,41 +830,63 @@ class ClipboardService {
   /// resolution would empty the source app's clipboard, see the long
   /// comment in [_tick]).
   Future<ClipboardEntry?> _classifyItem(ClipboardDataReader item) async {
-    for (final tag in ClipboardImageFormat.values) {
-      final format = _formatFor(tag);
-      if (!item.canProvide(format)) continue;
-      final bytes = await _readBinary(item, format);
-      if (bytes != null && bytes.isNotEmpty) {
-        return ClipboardEntry.image(bytes, format: tag);
-      }
-    }
+    final hasPlain = item.canProvide(Formats.plainText);
+    // Office/Word (and other rich editors) publish a PDF — and sometimes a
+    // raster — *render* of the selection alongside plain/RTF/HTML text so
+    // targets can paste with full fidelity. Without this gate the PDF
+    // flavor outranks the text and a plain Word sentence becomes a pdf
+    // entry. plainText+RTF together is the signature of "text copied from
+    // a rich editor"; image-first sources (browsers, screenshot tools)
+    // don't publish RTF, so their image flavor still wins below.
+    final isRichDocTextCopy = hasPlain && item.canProvide(_rtfFormat);
 
-    if (item.canProvide(_svgFormat)) {
-      final bytes = await _readBinary(item, _svgFormat);
-      if (bytes != null && bytes.isNotEmpty && isSafeSvgPayload(bytes)) {
-        try {
-          return ClipboardEntry.svg(utf8.decode(bytes));
-        } catch (_) {
-          // Non-UTF-8 payload — skip SVG
+    // Binary probes (image → svg → pdf). [allowPdfWithText] is false on
+    // the primary pass — a PDF flavor next to a plain-text flavor is a
+    // fidelity companion, not the payload — and true on the fallback pass
+    // where the advertised text legs turned out to be empty.
+    Future<ClipboardEntry?> probeBinary({required bool allowPdfWithText}) async {
+      for (final tag in ClipboardImageFormat.values) {
+        final format = _formatFor(tag);
+        if (!item.canProvide(format)) continue;
+        final bytes = await _readBinary(item, format);
+        if (bytes != null && bytes.isNotEmpty) {
+          return ClipboardEntry.image(bytes, format: tag);
         }
       }
-    }
 
-    if (item.canProvide(Formats.pdf)) {
-      final bytes = await _readBinary(item, Formats.pdf);
-      if (bytes != null && bytes.isNotEmpty) {
-        if (bytes.length > _maxPdfBytes) {
-          debugPrint(
-            'sclip: dropping oversized PDF payload '
-            '(${bytes.length} bytes > $_maxPdfBytes)',
-          );
-        } else {
-          return ClipboardEntry.pdf(bytes);
+      if (item.canProvide(_svgFormat)) {
+        final bytes = await _readBinary(item, _svgFormat);
+        if (bytes != null && bytes.isNotEmpty && isSafeSvgPayload(bytes)) {
+          try {
+            return ClipboardEntry.svg(utf8.decode(bytes));
+          } catch (_) {
+            // Non-UTF-8 payload — skip SVG
+          }
         }
       }
+
+      if ((allowPdfWithText || !hasPlain) && item.canProvide(Formats.pdf)) {
+        final bytes = await _readBinary(item, Formats.pdf);
+        if (bytes != null && bytes.isNotEmpty) {
+          if (bytes.length > _maxPdfBytes) {
+            debugPrint(
+              'sclip: dropping oversized PDF payload '
+              '(${bytes.length} bytes > $_maxPdfBytes)',
+            );
+          } else {
+            return ClipboardEntry.pdf(bytes);
+          }
+        }
+      }
+      return null;
     }
 
-    if (item.canProvide(Formats.plainText)) {
+    if (!isRichDocTextCopy) {
+      final binary = await probeBinary(allowPdfWithText: false);
+      if (binary != null) return binary;
+    }
+
+    if (hasPlain) {
       final text = await _readText(item, Formats.plainText);
       if (text != null && text.isNotEmpty) {
         // URL/color detection takes priority over richText even when HTML is
@@ -832,6 +937,14 @@ class ClipboardService {
           return ClipboardEntry.richText(plainText: stripped, html: html);
         }
       }
+    }
+
+    // Rich-doc gate engaged but every advertised text leg came back empty —
+    // e.g. copying an image *object* inside Word still publishes RTF. Fall
+    // back to the binary probes so the payload isn't lost; PDF is allowed
+    // here because text demonstrably wasn't the payload.
+    if (isRichDocTextCopy) {
+      return probeBinary(allowPdfWithText: true);
     }
 
     return null;

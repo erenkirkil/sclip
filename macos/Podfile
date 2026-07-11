@@ -44,4 +44,20 @@ post_install do |installer|
       end
     end
   end
+
+  # Xcode 26: TOOLCHAIN_DIR can resolve to the Metal toolchain, which ships
+  # no Swift libraries, so the CocoaPods-injected
+  # "${TOOLCHAIN_DIR}/usr/lib/swift/${PLATFORM_NAME}" search path triggers
+  # 'ld: warning: search path ... not found' on every build. The Swift
+  # runtime lives in the OS (/usr/lib/swift stays in the list), so the
+  # entry is dead weight on modern toolchains; strip it.
+  # Both spellings occur: CocoaPods writes "${TOOLCHAIN_DIR}/..." (quoted,
+  # braces) and Flutter's podhelper writes $(TOOLCHAIN_DIR)/.../ (parens,
+  # trailing slash). Only LIBRARY_SEARCH_PATHS lines are touched.
+  toolchain_swift = /"?\$[({]TOOLCHAIN_DIR[)}]\/usr\/lib\/swift\/\$[({]PLATFORM_NAME[)}]\/?"? ?/
+  Dir.glob(File.join(installer.sandbox.root.to_s, 'Target Support Files', '**', '*.xcconfig')).each do |file|
+    text = File.read(file)
+    patched = text.gsub(/^LIBRARY_SEARCH_PATHS = .*$/) { |line| line.gsub(toolchain_swift, '').rstrip }
+    File.write(file, patched) if patched != text
+  end
 end

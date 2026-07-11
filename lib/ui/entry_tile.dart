@@ -485,6 +485,13 @@ class _Thumbnail extends StatelessWidget {
                     bytes,
                     fit: BoxFit.cover,
                     gaplessPlayback: true,
+                    // Decode at thumbnail scale — a 5MB Retina screenshot
+                    // would otherwise pin a ~20MB full-resolution RGBA
+                    // bitmap in the image cache to paint a 48px square.
+                    // Height only: specifying both dimensions would decode
+                    // to a distorted square instead of letting cover crop.
+                    cacheHeight:
+                        (48 * MediaQuery.devicePixelRatioOf(context)).round(),
                     errorBuilder: (_, _, _) =>
                         const ColoredBox(color: Colors.black12),
                   ),
@@ -566,6 +573,10 @@ class _Leading extends StatelessWidget {
               height: 48,
               fit: BoxFit.cover,
               gaplessPlayback: true,
+              // Decode at thumbnail scale (see _Thumbnail) — full-size
+              // bytes stay untouched for writeBack.
+              cacheHeight:
+                  (48 * MediaQuery.devicePixelRatioOf(context)).round(),
               errorBuilder: (_, _, _) => const Icon(Icons.image),
             ),
           );

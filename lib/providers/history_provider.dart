@@ -21,10 +21,17 @@ class HistoryProvider extends ChangeNotifier {
     if (value <= 0 || value == _maxItems) return;
     _maxItems = value;
     if (_entries.length > _maxItems) {
-      _entries.removeRange(_maxItems, _entries.length);
+      _truncateToMax();
       notifyListeners();
     }
   }
+
+  /// Invoked for every entry that permanently leaves the history (FIFO
+  /// eviction, delete, clear, dedup replacement). Lets the clipboard
+  /// service delete the entry's materialized temp files so pasted content
+  /// doesn't linger on disk until the next launch. touch() reinsertion is
+  /// not an eviction and does not fire this.
+  void Function(ClipboardEntry entry)? onEvict;
 
   /// Per-entry image byte cap. Anything larger is dropped on ingest so a
   /// single oversized paste can't push the process into hundreds of MB.
@@ -105,7 +112,9 @@ class HistoryProvider extends ChangeNotifier {
           (e) => _carriesImage(e) && e.contentHash != entry.contentHash,
         );
         if (victimIdx < 0) break;
-        projected -= _imageBytesOf(_entries.removeAt(victimIdx));
+        final victim = _entries.removeAt(victimIdx);
+        projected -= _imageBytesOf(victim);
+        onEvict?.call(victim);
       }
     }
 
@@ -113,13 +122,24 @@ class HistoryProvider extends ChangeNotifier {
       (e) => e.contentHash == entry.contentHash,
     );
     if (existingIndex >= 0) {
-      _entries.removeAt(existingIndex);
+      // Dedup replacement: the incoming entry has a fresh id, so the old
+      // entry (and any temp files keyed by its id) is gone for good.
+      // NOTE: the removal must happen outside the `?.` call — Dart
+      // short-circuits argument evaluation when the target is null.
+      final replaced = _entries.removeAt(existingIndex);
+      onEvict?.call(replaced);
     }
     _entries.insert(0, entry);
-    if (_entries.length > _maxItems) {
-      _entries.removeRange(_maxItems, _entries.length);
-    }
+    _truncateToMax();
     notifyListeners();
+  }
+
+  /// Drops everything past [_maxItems], firing [onEvict] per victim.
+  void _truncateToMax() {
+    while (_entries.length > _maxItems) {
+      final victim = _entries.removeLast();
+      onEvict?.call(victim);
+    }
   }
 
   static bool _carriesImage(ClipboardEntry e) {
@@ -161,7 +181,8 @@ class HistoryProvider extends ChangeNotifier {
 
   void removeAt(int index) {
     if (index < 0 || index >= _entries.length) return;
-    _entries.removeAt(index);
+    final removed = _entries.removeAt(index);
+    onEvict?.call(removed);
     notifyListeners();
   }
 
@@ -172,7 +193,11 @@ class HistoryProvider extends ChangeNotifier {
 
   void clear() {
     if (_entries.isEmpty) return;
+    final victims = List.of(_entries);
     _entries.clear();
+    for (final e in victims) {
+      onEvict?.call(e);
+    }
     notifyListeners();
   }
 }

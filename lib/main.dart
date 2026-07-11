@@ -9,6 +9,13 @@ import 'ui/home_page.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Clamp Flutter's decoded-image cache (default 100 MB / 1000 images).
+  // Thumbnails decode at ~48px now, so 32 MB is generous headroom — the
+  // default would let full-size decodes from before the clamp (or any
+  // future unscaled Image) stick around long after their entries left
+  // history, pinning RSS at its high-water mark.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 32 << 20;
+
   // Surface the default red-screen errors to the console so we can diagnose
   // frames that flash an error widget without leaving a log trail. Debug
   // builds only — release binaries fall back to Flutter's default handler so

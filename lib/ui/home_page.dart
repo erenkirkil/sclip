@@ -83,6 +83,10 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
     widget.settings.addListener(_onSettingsChanged);
 
+    // Evicted/deleted entries take their materialized temp files with them
+    // so pasted content doesn't sit on disk until the next launch.
+    _history.onEvict = (e) => unawaited(_service.cleanupEntryTempFiles(e));
+
     _sub = _service.entries.listen(_history.add);
     _service.start();
 
@@ -103,7 +107,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
     _tray = TrayService(
       onToggleWindow: _toggleWindow,
-      onClearAll: () async => _history.clear(),
+      onClearAll: () async => _clearHistory(),
       onTogglePin: _togglePin,
       onOpenSettings: _openSettings,
       onQuit: _quit,
@@ -468,11 +472,23 @@ class _HomePageState extends State<HomePage> with WindowListener {
       ),
     );
     if (confirmed == true) {
-      _history.clear();
+      _clearHistory();
     }
   }
 
+  /// Clears the history and drops the decoded bitmaps Flutter's image
+  /// cache retained for the thumbnails — "clear history" should actually
+  /// release the memory, not just the raw bytes.
+  void _clearHistory() {
+    _history.clear();
+    PaintingBinding.instance.imageCache.clear();
+  }
+
   Future<void> _quit() async {
+    // destroy() kills the process without running State.dispose, so sweep
+    // the service (and its materialized temp files) explicitly here —
+    // otherwise pasted content would linger on disk until the next launch.
+    await _service.dispose();
     await windowManager.setPreventClose(false);
     await windowManager.destroy();
   }
