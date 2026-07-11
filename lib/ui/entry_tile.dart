@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -179,56 +181,75 @@ class _ClipboardEntryTileState extends State<ClipboardEntryTile> {
           }
         },
       },
-      child: ListTile(
-        dense: true,
-        autofocus: widget.autofocus,
-        focusNode: _tileFocus,
-        focusColor: tileFocus,
-        hoverColor: tileHover,
-        visualDensity: const VisualDensity(horizontal: -4, vertical: -3),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-        minLeadingWidth: 0,
-        horizontalTitleGap: 14,
-        onTap: widget.onTap,
-        leading: _Leading(entry: widget.entry),
-        title: Text(
-          widget.entry.preview,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 13),
-        ),
-        subtitle: Text(
-          _formatTime(widget.entry.createdAt),
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.hintColor,
-            fontSize: 11,
+      // ListenableBuilder so the focus ring below tracks keyboard focus —
+      // the 18%-alpha focusColor tint alone is ~1.3:1 against the resting
+      // row, far under the 3:1 WCAG non-text minimum for the app's primary
+      // keyboard target.
+      child: ListenableBuilder(
+        listenable: _tileFocus,
+        builder: (context, _) => ListTile(
+          dense: true,
+          autofocus: widget.autofocus,
+          focusNode: _tileFocus,
+          focusColor: tileFocus,
+          hoverColor: tileHover,
+          shape: _tileFocus.hasFocus
+              ? RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  side: BorderSide(color: scheme.primary, width: 2),
+                )
+              : null,
+          visualDensity: const VisualDensity(horizontal: -4, vertical: -3),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 2,
           ),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (canOpen)
+          minLeadingWidth: 0,
+          horizontalTitleGap: 14,
+          onTap: widget.onTap,
+          leading: _Leading(entry: widget.entry),
+          title: Text(
+            widget.entry.preview,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13),
+          ),
+          subtitle: Text(
+            _formatTime(widget.entry.createdAt),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.hintColor,
+              fontSize: 11,
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (canOpen)
+                IconButton(
+                  focusNode: _openFocus,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  tooltip: 'Tarayıcıda aç',
+                  onPressed: widget.onOpen,
+                  style: _trailingIconStyle(scheme, scheme.primary),
+                ),
               IconButton(
-                focusNode: _openFocus,
+                focusNode: _deleteFocus,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.open_in_new, size: 16),
-                tooltip: 'Tarayıcıda aç',
-                onPressed: widget.onOpen,
-                style: _trailingIconStyle(scheme, scheme.primary),
+                icon: const Icon(Icons.close, size: 16),
+                tooltip: 'Sil',
+                onPressed: widget.onDelete,
+                style: _trailingIconStyle(scheme, scheme.error),
               ),
-            IconButton(
-              focusNode: _deleteFocus,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.close, size: 16),
-              tooltip: 'Sil',
-              onPressed: widget.onDelete,
-              style: _trailingIconStyle(scheme, scheme.error),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -241,11 +262,45 @@ class _ClipboardEntryTileState extends State<ClipboardEntryTile> {
     final thumbFocuses = _ensureThumbFocuses(bytesList.length);
     final canPasteAll = widget.onPasteAll != null && bytesList.isNotEmpty;
 
-    // Fixed grid width of 5 covers our min-window (300px). Hardcoding beats
-    // LayoutBuilder churn here — a resize that drops us below 5 columns
-    // would just clip the last thumb, which Wrap already handles gracefully.
-    const columns = 5;
+    // Keyboard row hops must match Wrap's actual layout, so derive the
+    // column count from the real width — Wrap wraps (it never clips), and
+    // a hardcoded count sends ArrowUp/Down to the wrong visual cell as
+    // soon as the window is resized off the default. LayoutBuilder only
+    // rebuilds on constraint changes, so there is no per-frame churn.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const thumbExtent = 48.0;
+        const thumbSpacing = 4.0;
+        // Mirror the row chrome below: horizontal padding (10+10), the
+        // 4px gap and one or two 28px trailing buttons.
+        final chrome = 20.0 + 4.0 + 28.0 + (canPasteAll ? 28.0 : 0.0);
+        final wrapWidth = constraints.maxWidth - chrome;
+        final columns = math.max(
+          1,
+          ((wrapWidth + thumbSpacing) / (thumbExtent + thumbSpacing)).floor(),
+        );
+        return _buildImageSetBody(
+          context,
+          theme: theme,
+          scheme: scheme,
+          bytesList: bytesList,
+          thumbFocuses: thumbFocuses,
+          canPasteAll: canPasteAll,
+          columns: columns,
+        );
+      },
+    );
+  }
 
+  Widget _buildImageSetBody(
+    BuildContext context, {
+    required ThemeData theme,
+    required ColorScheme scheme,
+    required List<Uint8List> bytesList,
+    required List<FocusNode> thumbFocuses,
+    required bool canPasteAll,
+    required int columns,
+  }) {
     void focusByRowOffset(int delta) {
       final primary = FocusManager.instance.primaryFocus;
       final i = thumbFocuses.indexOf(primary!);
@@ -340,6 +395,8 @@ class _ClipboardEntryTileState extends State<ClipboardEntryTile> {
                       for (var i = 0; i < bytesList.length; i++)
                         _Thumbnail(
                           bytes: bytesList[i],
+                          index: i,
+                          count: bytesList.length,
                           focusNode: thumbFocuses[i],
                           autofocus: widget.autofocus && i == 0,
                           onActivate: () => widget.onImageTap?.call(i),
@@ -426,12 +483,19 @@ class _ClipboardEntryTileState extends State<ClipboardEntryTile> {
 class _Thumbnail extends StatelessWidget {
   const _Thumbnail({
     required this.bytes,
+    required this.index,
+    required this.count,
     required this.focusNode,
     required this.onActivate,
     this.autofocus = false,
   });
 
   final Uint8List bytes;
+
+  /// Position within the imageSet — feeds the semantic label so a screen
+  /// reader can tell N visually identical tap targets apart.
+  final int index;
+  final int count;
   final FocusNode focusNode;
   final VoidCallback onActivate;
   final bool autofocus;
@@ -463,37 +527,46 @@ class _Thumbnail extends StatelessWidget {
         listenable: focusNode,
         builder: (context, _) {
           final focused = focusNode.hasFocus;
-          return GestureDetector(
-            onTap: onActivate,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 80),
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: focused ? scheme.primary : Colors.transparent,
-                    width: 2,
+          return Semantics(
+            button: true,
+            label: 'Resim ${index + 1} / $count — yapıştır',
+            child: GestureDetector(
+              onTap: onActivate,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 80),
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: focused ? scheme.primary : Colors.transparent,
+                      width: 2,
+                    ),
                   ),
-                ),
-                padding: const EdgeInsets.all(1),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: Image.memory(
-                    bytes,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                    // Decode at thumbnail scale — a 5MB Retina screenshot
-                    // would otherwise pin a ~20MB full-resolution RGBA
-                    // bitmap in the image cache to paint a 48px square.
-                    // Height only: specifying both dimensions would decode
-                    // to a distorted square instead of letting cover crop.
-                    cacheHeight:
-                        (48 * MediaQuery.devicePixelRatioOf(context)).round(),
-                    errorBuilder: (_, _, _) =>
-                        const ColoredBox(color: Colors.black12),
+                  padding: const EdgeInsets.all(1),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Image.memory(
+                      bytes,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                      // The Semantics wrapper above is the announced node.
+                      excludeFromSemantics: true,
+                      // Decode at thumbnail scale — a 5MB Retina screenshot
+                      // would otherwise pin a ~20MB full-resolution RGBA
+                      // bitmap in the image cache to paint a 48px square.
+                      // Height only: specifying both dimensions would decode
+                      // to a distorted square instead of letting cover crop.
+                      cacheHeight: (48 * MediaQuery.devicePixelRatioOf(context))
+                          .round(),
+                      errorBuilder: (ctx, _, _) => ColoredBox(
+                        color: Theme.of(
+                          ctx,
+                        ).colorScheme.surfaceContainerHighest,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -505,13 +578,12 @@ class _Thumbnail extends StatelessWidget {
   }
 }
 
-/// Defense-in-depth render guard for SVG payloads. The ingestion path in
-/// ClipboardService already rejects XXE/XInclude payloads before they
-/// become entries, so this widget should never see malicious XML in
-/// practice. It exists to catch the residual case where flutter_svg
-/// itself throws on malformed-but-benign input (truncated XML, unknown
-/// elements) — without it, one bad SVG in history could take the whole
-/// list view down.
+/// Render guard for SVG payloads. The ingestion path in ClipboardService
+/// already rejects XXE/XInclude payloads before they become entries; this
+/// handles the residual case of malformed-but-benign input (truncated
+/// XML, unknown elements). XML parsing happens *asynchronously* during
+/// resolve — a try/catch around the constructor can never fire — so
+/// errorBuilder is the mechanism that actually catches a failed parse.
 class _SafeSvg extends StatelessWidget {
   const _SafeSvg({required this.xml});
 
@@ -519,15 +591,12 @@ class _SafeSvg extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    try {
-      return SvgPicture.string(
-        xml,
-        fit: BoxFit.contain,
-        placeholderBuilder: (_) => const Icon(Icons.image_outlined),
-      );
-    } catch (_) {
-      return const Icon(Icons.broken_image_outlined);
-    }
+    return SvgPicture.string(
+      xml,
+      fit: BoxFit.contain,
+      placeholderBuilder: (_) => const Icon(Icons.image_outlined),
+      errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined),
+    );
   }
 }
 
@@ -538,30 +607,44 @@ class _Leading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Every branch carries a semantic label: the tile title announces only
+    // preview + timestamp, so without these the entry *type* is conveyed
+    // purely visually (a color entry reads as a bare hex string, richText
+    // and text are indistinguishable to a screen reader).
     switch (entry.type) {
       case ClipboardEntryType.color:
         final argb = entry.toArgb32();
         if (argb != null) {
-          return Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: Color(argb),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.white24),
+          return Semantics(
+            label: 'Renk',
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: Color(argb),
+                borderRadius: BorderRadius.circular(4),
+                // Theme-derived: white24 was invisible around a light
+                // swatch (e.g. #ffffff) on the light surface.
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
             ),
           );
         }
-        return const Icon(Icons.palette);
+        return const Icon(Icons.palette, semanticLabel: 'Renk');
       case ClipboardEntryType.svg:
         final xml = entry.text;
         if (xml != null && xml.isNotEmpty) {
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: SizedBox(width: 48, height: 48, child: _SafeSvg(xml: xml)),
+          return Semantics(
+            label: 'SVG görsel',
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: SizedBox(width: 48, height: 48, child: _SafeSvg(xml: xml)),
+            ),
           );
         }
-        return const Icon(Icons.image_outlined);
+        return const Icon(Icons.image_outlined, semanticLabel: 'SVG görsel');
       case ClipboardEntryType.image:
         final bytes = entry.imageBytes;
         if (bytes != null && bytes.isNotEmpty) {
@@ -573,29 +656,37 @@ class _Leading extends StatelessWidget {
               height: 48,
               fit: BoxFit.cover,
               gaplessPlayback: true,
+              semanticLabel: 'Resim',
               // Decode at thumbnail scale (see _Thumbnail) — full-size
               // bytes stay untouched for writeBack.
-              cacheHeight:
-                  (48 * MediaQuery.devicePixelRatioOf(context)).round(),
-              errorBuilder: (_, _, _) => const Icon(Icons.image),
+              cacheHeight: (48 * MediaQuery.devicePixelRatioOf(context))
+                  .round(),
+              errorBuilder: (_, _, _) =>
+                  const Icon(Icons.image, semanticLabel: 'Resim'),
             ),
           );
         }
-        return const Icon(Icons.image);
+        return const Icon(Icons.image, semanticLabel: 'Resim');
       case ClipboardEntryType.imageSet:
         // imageSet uses its own tile body; _Leading shouldn't be rendered
         // for it, but keep a sensible fallback if it ever slips through.
-        return const Icon(Icons.collections_outlined);
+        return const Icon(
+          Icons.collections_outlined,
+          semanticLabel: 'Resim grubu',
+        );
       case ClipboardEntryType.url:
-        return const Icon(Icons.link);
+        return const Icon(Icons.link, semanticLabel: 'Bağlantı');
       case ClipboardEntryType.files:
-        return const Icon(Icons.folder);
+        return const Icon(Icons.folder, semanticLabel: 'Dosya');
       case ClipboardEntryType.pdf:
-        return const Icon(Icons.picture_as_pdf);
+        return const Icon(Icons.picture_as_pdf, semanticLabel: 'PDF');
       case ClipboardEntryType.richText:
-        return const Icon(Icons.text_snippet_outlined);
+        return const Icon(
+          Icons.text_snippet_outlined,
+          semanticLabel: 'Biçimli metin',
+        );
       case ClipboardEntryType.text:
-        return const Icon(Icons.notes);
+        return const Icon(Icons.notes, semanticLabel: 'Metin');
     }
   }
 }

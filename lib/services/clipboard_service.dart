@@ -471,7 +471,7 @@ class ClipboardService {
     // until the next start.
     unawaited(_pruneTempDir());
     _timer = Timer.periodic(_interval, (_) => _tick());
-    _tick();
+    unawaited(_tick());
   }
 
   static Future<void> _pruneTempDir() async {
@@ -649,7 +649,9 @@ class ClipboardService {
     for (final p in paths) {
       try {
         final f = File(p);
-        final stat = await f.stat();
+        // Sync stat: metadata lookup is microseconds and the async dart:io
+        // variant round-trips the IO event loop per file (avoid_slow_async_io).
+        final stat = f.statSync();
         if (stat.size <= 0 || stat.size > _maxImageInjectBytes) {
           return filesFallback();
         }
@@ -743,13 +745,6 @@ class ClipboardService {
   /// the full payload for a direct Cmd/Ctrl+V.
   static const _maxTextChars = 2 * 1024 * 1024;
 
-  /// Byte-level pre-parse check: reject SVG payloads that contain XXE /
-  /// XInclude constructs before we hand them to flutter_svg. Scans only
-  /// the first 4 KB because DOCTYPE / ENTITY / ATTLIST declarations must
-  /// precede the root element by XML rules, so a malicious payload can't
-  /// hide them deeper in the file. `allowMalformed: true` so non-UTF-8
-  /// garbage decodes to replacement chars instead of throwing — we still
-  /// reject it on content grounds downstream.
   /// Heuristic for "this plain-text payload is actually SVG markup". Trim
   /// + lowercase the head, allow an optional XML prolog, then require a
   /// `<svg` open tag and a `</svg>` close. Restrictive enough that we
@@ -767,17 +762,27 @@ class ClipboardService {
     return startsWithSvg && body.contains('</svg>');
   }
 
+  /// Byte-level pre-parse check: reject SVG payloads that contain XXE /
+  /// XInclude constructs before we hand them to flutter_svg. Scans the
+  /// WHOLE payload case-insensitively — a fixed head window is bypassable
+  /// (XML allows unbounded comments before the DOCTYPE, pushing it past
+  /// any cutoff) and while XML mandates uppercase DOCTYPE/ENTITY, this
+  /// guard is defense in depth and must not rely on the strictness of
+  /// whatever parser sits behind flutter_svg in the future.
+  /// `allowMalformed: true` so non-UTF-8 garbage decodes to replacement
+  /// chars instead of throwing — we still reject it on content grounds
+  /// downstream. False positives (an SVG whose *text content* mentions
+  /// these tokens) merely demote the payload to a text entry.
   @visibleForTesting
   static bool isSafeSvgPayload(Uint8List bytes) {
     if (bytes.length > _maxSvgBytes) return false;
-    final headLen = bytes.length < 4096 ? bytes.length : 4096;
-    final head = utf8.decode(bytes.sublist(0, headLen), allowMalformed: true);
-    if (head.contains('<!DOCTYPE') ||
-        head.contains('<!ENTITY') ||
-        head.contains('<!ATTLIST')) {
+    final body = utf8.decode(bytes, allowMalformed: true).toLowerCase();
+    if (body.contains('<!doctype') ||
+        body.contains('<!entity') ||
+        body.contains('<!attlist')) {
       return false;
     }
-    if (head.contains('xmlns:xi=') || head.contains('XInclude')) {
+    if (body.contains('xmlns:xi=') || body.contains('xinclude')) {
       return false;
     }
     return true;
@@ -862,7 +867,9 @@ class ClipboardService {
     // the primary pass — a PDF flavor next to a plain-text flavor is a
     // fidelity companion, not the payload — and true on the fallback pass
     // where the advertised text legs turned out to be empty.
-    Future<ClipboardEntry?> probeBinary({required bool allowPdfWithText}) async {
+    Future<ClipboardEntry?> probeBinary({
+      required bool allowPdfWithText,
+    }) async {
       for (final tag in ClipboardImageFormat.values) {
         final format = _formatFor(tag);
         if (!item.canProvide(format)) continue;

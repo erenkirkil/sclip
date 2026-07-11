@@ -91,7 +91,7 @@ void main() {
       p.add(ClipboardEntry.text('c'));
 
       // Ensure some wall-clock delta is measurable.
-      await Future.delayed(const Duration(milliseconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 5));
 
       p.touch(a.id);
 

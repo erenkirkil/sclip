@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
 
 typedef TrayCallback = Future<void> Function();
@@ -72,33 +74,44 @@ class TrayService with TrayListener {
     _installed = false;
   }
 
+  /// Tray listener callbacks are synchronous, so the async app callbacks
+  /// are explicitly fire-and-forget — with the error logged instead of
+  /// vanishing into an unhandled-async-exception.
+  void _dispatch(TrayCallback cb) {
+    unawaited(
+      cb().catchError((Object e) {
+        debugPrint('sclip: tray callback failed: $e');
+      }),
+    );
+  }
+
   @override
   void onTrayIconMouseDown() {
-    onToggleWindow();
+    _dispatch(onToggleWindow);
   }
 
   @override
   void onTrayIconRightMouseDown() {
-    trayManager.popUpContextMenu();
+    unawaited(trayManager.popUpContextMenu());
   }
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {
     switch (menuItem.key) {
       case 'toggle':
-        onToggleWindow();
+        _dispatch(onToggleWindow);
         break;
       case 'pin':
-        onTogglePin();
+        _dispatch(onTogglePin);
         break;
       case 'clear':
-        onClearAll();
+        _dispatch(onClearAll);
         break;
       case 'settings':
-        onOpenSettings();
+        _dispatch(onOpenSettings);
         break;
       case 'quit':
-        onQuit();
+        _dispatch(onQuit);
         break;
     }
   }

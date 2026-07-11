@@ -220,12 +220,20 @@ class ClipboardEntry {
     contentHash: contentHash,
   );
 
-  String get preview {
+  static final _whitespaceRe = RegExp(r'\s+');
+
+  /// Single-line UI preview. Computed lazily, once per instance — entries
+  /// are immutable, and the whitespace-collapsing pass below is O(n) over
+  /// the full text; as a plain getter it used to run on every visible
+  /// tile rebuild (i.e. on every history mutation).
+  late final String preview = _computePreview();
+
+  String _computePreview() {
     switch (type) {
       case ClipboardEntryType.text:
       case ClipboardEntryType.url:
       case ClipboardEntryType.richText:
-        final t = (text ?? '').replaceAll(RegExp(r'\s+'), ' ').trim();
+        final t = (text ?? '').replaceAll(_whitespaceRe, ' ').trim();
         return t.length > 120 ? '${t.substring(0, 120)}…' : t;
       case ClipboardEntryType.color:
         return text ?? '';
@@ -307,10 +315,7 @@ class ClipboardEntry {
       return sha256.convert(bytes).toString().substring(0, 16);
     }
     final head = Uint8List.sublistView(bytes, 0, _edgeSampleBytes);
-    final tail = Uint8List.sublistView(
-      bytes,
-      bytes.length - _edgeSampleBytes,
-    );
+    final tail = Uint8List.sublistView(bytes, bytes.length - _edgeSampleBytes);
     final h = sha256.convert(head).toString().substring(0, 16);
     final t = sha256.convert(tail).toString().substring(0, 16);
     return '$h.$t';
@@ -324,9 +329,7 @@ class ClipboardEntry {
   /// [A, B] and [B, A] don't. That matches how users think about the
   /// clipboard (first image tends to be the "lead" selection).
   static String _hashImageSet(List<Uint8List> images) {
-    final parts = images
-        .map((b) => '${b.length}:${_digestOf(b)}')
-        .join('|');
+    final parts = images.map((b) => '${b.length}:${_digestOf(b)}').join('|');
     final combined = sha256
         .convert(utf8.encode(parts))
         .toString()

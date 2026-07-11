@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
@@ -119,16 +120,25 @@ class _HomePageState extends State<HomePage> with WindowListener {
     );
     _hotkey = HotkeyService(onToggleWindow: _toggleWindow);
 
-    _tray.init();
+    unawaited(_tray.init());
     // Pass the persisted hotkey through so restart survives user config.
     // Surface a banner when nothing could be registered — otherwise the
     // only symptom is a shortcut that silently does nothing.
     unawaited(
       _hotkey.init(preferred: widget.settings.toggleHotkey).then((ok) {
-        if (mounted && ok != _hotkeyOk) setState(() => _hotkeyOk = ok);
+        if (!mounted || ok == _hotkeyOk) return;
+        if (!ok) {
+          unawaited(
+            SemanticsService.announce(
+              'Genel kısayol kaydedilemedi.',
+              TextDirection.ltr,
+            ),
+          );
+        }
+        setState(() => _hotkeyOk = ok);
       }),
     );
-    _checkAccessibility();
+    unawaited(_checkAccessibility());
 
     // Global Esc handler. CallbackShortcuts in the widget tree requires a
     // focused descendant, which isn't reliable when the window is first
@@ -180,7 +190,19 @@ class _HomePageState extends State<HomePage> with WindowListener {
         'isAccessibilityTrusted',
       );
       if (!mounted) return;
-      setState(() => _accessibilityOk = trusted ?? false);
+      final ok = trusted ?? false;
+      if (!ok && _accessibilityOk) {
+        // The banner appearing is invisible to a screen-reader user — the
+        // audience most affected by broken auto-paste. Announce once on
+        // the ok→broken transition (not on every re-check).
+        unawaited(
+          SemanticsService.announce(
+            'Otomatik yapıştırma için Accessibility izni gerek.',
+            TextDirection.ltr,
+          ),
+        );
+      }
+      setState(() => _accessibilityOk = ok);
     } on PlatformException catch (e) {
       debugPrint('sclip: accessibility probe failed: $e');
     } on MissingPluginException {
@@ -194,11 +216,11 @@ class _HomePageState extends State<HomePage> with WindowListener {
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     windowManager.removeListener(this);
     widget.settings.removeListener(_onSettingsChanged);
-    _sub?.cancel();
-    _service.dispose();
+    unawaited(_sub?.cancel());
+    unawaited(_service.dispose());
     _history.dispose();
-    _tray.dispose();
-    _hotkey.dispose();
+    unawaited(_tray.dispose());
+    unawaited(_hotkey.dispose());
     _firstItemFocus.dispose();
     super.dispose();
   }
@@ -361,8 +383,14 @@ class _HomePageState extends State<HomePage> with WindowListener {
     // Clamping nudges only as much as needed to keep the bigger size
     // inside the visible bounds. Physical clamping is used on Windows.
     if (bounds != null) {
-      final physicalSize = Size(settingsSize.width * scale, settingsSize.height * scale);
-      final physicalPosition = Offset(previousPosition.dx * scale, previousPosition.dy * scale);
+      final physicalSize = Size(
+        settingsSize.width * scale,
+        settingsSize.height * scale,
+      );
+      final physicalPosition = Offset(
+        previousPosition.dx * scale,
+        previousPosition.dy * scale,
+      );
       final clampedPhysical = clampInto(physicalPosition, physicalSize, bounds);
       final clampedLogical = Platform.isWindows
           ? Offset(clampedPhysical.dx / scale, clampedPhysical.dy / scale)
@@ -411,11 +439,24 @@ class _HomePageState extends State<HomePage> with WindowListener {
         final expectedOpenPosition = bounds == null
             ? previousPosition
             : (() {
-                final physicalSize = Size(settingsSize.width * scale, settingsSize.height * scale);
-                final physicalPos = Offset(previousPosition.dx * scale, previousPosition.dy * scale);
-                final clampedPhysical = clampInto(physicalPos, physicalSize, bounds);
+                final physicalSize = Size(
+                  settingsSize.width * scale,
+                  settingsSize.height * scale,
+                );
+                final physicalPos = Offset(
+                  previousPosition.dx * scale,
+                  previousPosition.dy * scale,
+                );
+                final clampedPhysical = clampInto(
+                  physicalPos,
+                  physicalSize,
+                  bounds,
+                );
                 return Platform.isWindows
-                    ? Offset(clampedPhysical.dx / scale, clampedPhysical.dy / scale)
+                    ? Offset(
+                        clampedPhysical.dx / scale,
+                        clampedPhysical.dy / scale,
+                      )
                     : clampedPhysical;
               })();
         final unmoved =
@@ -552,6 +593,18 @@ class _HomePageState extends State<HomePage> with WindowListener {
   }
 
   @override
+  void onWindowMinimize() {
+    // Windows: the window is skip-taskbar, so a minimized sclip has no
+    // taskbar button to restore from and parks as a floating title strip;
+    // worse, IsWindowVisible stays TRUE while minimized so the next hotkey
+    // press takes the hide branch. Redirect minimize to the same
+    // hide-to-tray behaviour as close. macOS handles Cmd+M restore via
+    // show()'s makeKeyAndOrderFront, but the consistent behaviour is
+    // desirable there too.
+    unawaited(_hideAndReturnFocus());
+  }
+
+  @override
   void onWindowFocus() {
     unawaited(HardwareKeyboard.instance.syncKeyboardState());
 
@@ -571,7 +624,9 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   @override
   void onWindowBlur() {
-    debugPrint('[DEBUG] ${DateTime.now().toIso8601String()} - onWindowBlur | Pressed keys: ${HardwareKeyboard.instance.logicalKeysPressed.map((k) => k.debugName).join(", ")}');
+    debugPrint(
+      '[DEBUG] ${DateTime.now().toIso8601String()} - onWindowBlur | Pressed keys: ${HardwareKeyboard.instance.logicalKeysPressed.map((k) => k.debugName).join(", ")}',
+    );
     // Auto-hide when user clicks away — unless the user has pinned the
     // window or turned the behaviour off entirely in settings.
     // _suppressBlur guards against our own hide path, which also fires

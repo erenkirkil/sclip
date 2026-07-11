@@ -10,12 +10,13 @@ typedef ScreenLayout = ({Offset cursor, List<DisplayInfo> displays});
 /// Snapshot of the desktop: cursor position plus every display's
 /// visible rectangle, all in a single top-left flipped coordinate
 /// space. Queried from our own native channel because
-/// `screen_retriever` 0.2.0 normalises cursor Y against
+/// `screen_retriever` 0.2.0 normalised cursor Y against
 /// `min(frame.maxY)` but display Y against `primary.frame.height` —
 /// secondary is taller or sits side-by-side, so cursor-in-display
-/// containment silently fails. Falling back to `screen_retriever`
-/// when the channel isn't available keeps tests + non-desktop hosts
-/// working.
+/// containment silently failed. (We're on 0.2.2 now; the native
+/// channel also gives us per-monitor DPI, so it stays the primary
+/// path regardless.) Falling back to `screen_retriever` when the
+/// channel isn't available keeps tests + non-desktop hosts working.
 Future<ScreenLayout?> queryScreenLayout(MethodChannel windowChannel) async {
   try {
     final layout = await windowChannel.invokeMapMethod<String, dynamic>(
@@ -27,7 +28,7 @@ Future<ScreenLayout?> queryScreenLayout(MethodChannel windowChannel) async {
         (cursorMap['dx'] as num).toDouble(),
         (cursorMap['dy'] as num).toDouble(),
       );
-      final raw = (layout['displays'] as List).cast<Map>();
+      final raw = (layout['displays'] as List).cast<Map<dynamic, dynamic>>();
       final displays = [
         for (final d in raw)
           (
@@ -66,7 +67,11 @@ Future<ScreenLayout?> queryScreenLayout(MethodChannel windowChannel) async {
                     d.size.width / (d.scaleFactor ?? 1.0).toDouble(),
                     d.size.height / (d.scaleFactor ?? 1.0).toDouble(),
                   ));
-          return (visible: visible, full: visible, scaleFactor: (d.scaleFactor ?? 1.0).toDouble());
+          return (
+            visible: visible,
+            full: visible,
+            scaleFactor: (d.scaleFactor ?? 1.0).toDouble(),
+          );
         })(),
     ];
     return (cursor: cursor, displays: displays);
@@ -98,10 +103,7 @@ DisplayInfo? displayContaining(Offset point, List<DisplayInfo> displays) {
 /// MacBook Air is cramped enough already without sclip eating most of
 /// the screen.
 Size settingsSizeFor(Rect bounds, Size preferredSize) {
-  final w = math.min(
-    preferredSize.width,
-    math.max(380.0, bounds.width * 0.7),
-  );
+  final w = math.min(preferredSize.width, math.max(380.0, bounds.width * 0.7));
   final h = math.min(
     preferredSize.height,
     math.max(440.0, bounds.height * 0.7),

@@ -21,41 +21,45 @@ class WarningBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.errorContainer,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 8,
-          ),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: scheme.onErrorContainer,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  message,
+    // button: true so screen readers announce this as actionable — the
+    // row otherwise reads as plain text with an unnamed tap action, and
+    // the 'action label' trailing text visually mimics a separate link
+    // while being part of the same target.
+    return Semantics(
+      button: true,
+      label: '$message $actionLabel',
+      // The label above is the whole announcement; without this the inner
+      // Texts would be read a second time as separate nodes.
+      excludeSemantics: true,
+      child: Material(
+        color: scheme.errorContainer,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                Icon(icon, size: 16, color: scheme.onErrorContainer),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+                Text(
+                  actionLabel,
                   style: TextStyle(
                     fontSize: 12,
+                    fontWeight: FontWeight.w600,
                     color: scheme.onErrorContainer,
                   ),
                 ),
-              ),
-              Text(
-                actionLabel,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: scheme.onErrorContainer,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

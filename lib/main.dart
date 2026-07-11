@@ -29,7 +29,8 @@ Future<void> main() async {
       // KeyUp events from the global shortcut or instantaneous hide will trigger
       // "key not pressed", and trailing KeyDowns might trigger "already pressed".
       if (ex.contains('HardwareKeyboard') &&
-          (ex.contains('is not pressed') || ex.contains('is already pressed'))) {
+          (ex.contains('is not pressed') ||
+              ex.contains('is already pressed'))) {
         return;
       }
       debugPrint('sclip: widget error: ${details.exception}');

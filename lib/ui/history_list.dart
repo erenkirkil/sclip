@@ -1,11 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../models/clipboard_entry.dart';
 import '../providers/history_provider.dart';
 import 'entry_tile.dart';
 
-class HistoryList extends StatelessWidget {
+class HistoryList extends StatefulWidget {
   const HistoryList({
     super.key,
     required this.provider,
@@ -21,11 +24,49 @@ class HistoryList extends StatelessWidget {
   final FocusNode? firstItemFocusNode;
 
   @override
+  State<HistoryList> createState() => _HistoryListState();
+}
+
+class _HistoryListState extends State<HistoryList> {
+  /// Relative timestamps ('şimdi', '5dk önce') are computed at build time;
+  /// nothing else re-renders an idle list, so without this a tile stamped
+  /// 'şimdi' still reads 'şimdi' an hour later (indefinitely on Windows —
+  /// macOS used to be saved only by an incidental rebuild on window show).
+  /// One rebuild a minute of ≤30 lazy tiles is negligible.
+  Timer? _clockTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Shared delete path: announced for screen readers because the tile
+  /// silently vanishing is the only other feedback. Copy/paste actions are
+  /// deliberately not announced — the window hides and the paste itself is
+  /// the feedback (a SnackBar here would render into a hidden window and
+  /// flash stale on the next show).
+  void _delete(ClipboardEntry e) {
+    widget.provider.removeById(e.id);
+    unawaited(
+      SemanticsService.announce('Silindi: ${e.preview}', TextDirection.ltr),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: provider,
+      listenable: widget.provider,
       builder: (context, _) {
-        if (provider.isEmpty) {
+        if (widget.provider.isEmpty) {
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(24),
@@ -36,7 +77,7 @@ class HistoryList extends StatelessWidget {
             ),
           );
         }
-        final entries = provider.entries;
+        final entries = widget.provider.entries;
         // Arrow keys are not part of the default Flutter traversal map — wire
         // them to directional focus so the list behaves like any native list.
         return CallbackShortcuts(
@@ -71,65 +112,26 @@ class HistoryList extends StatelessWidget {
                 child: CallbackShortcuts(
                   bindings: {
                     const SingleActivator(LogicalKeyboardKey.delete): () =>
-                        provider.removeById(e.id),
+                        _delete(e),
                     const SingleActivator(LogicalKeyboardKey.backspace): () =>
-                        provider.removeById(e.id),
+                        _delete(e),
                   },
                   child: ClipboardEntryTile(
                     key: ValueKey(e.id),
                     entry: e,
                     autofocus: i == 0,
-                    focusNode: i == 0 ? firstItemFocusNode : null,
-                    onTap: () async {
-                      await onEntryTap(e);
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(
-                          SnackBar(
-                            duration: const Duration(seconds: 1),
-                            content: Text('Kopyalandı: ${e.preview}'),
-                          ),
-                        );
-                    },
+                    focusNode: i == 0 ? widget.firstItemFocusNode : null,
+                    onTap: () => widget.onEntryTap(e),
                     onImageTap: e.type == ClipboardEntryType.imageSet
-                        ? (index) async {
-                            await onEntryTap(e, imageIndex: index);
-                            if (!context.mounted) return;
-                            final count = e.imagesBytes?.length ?? 0;
-                            ScaffoldMessenger.of(context)
-                              ..hideCurrentSnackBar()
-                              ..showSnackBar(
-                                SnackBar(
-                                  duration: const Duration(seconds: 1),
-                                  content: Text(
-                                    'Kopyalandı: Resim ${index + 1} / $count',
-                                  ),
-                                ),
-                              );
-                          }
+                        ? (index) => widget.onEntryTap(e, imageIndex: index)
                         : null,
                     onPasteAll: e.type == ClipboardEntryType.imageSet
-                        ? () async {
-                            await onEntryTap(e);
-                            if (!context.mounted) return;
-                            final count = e.imagesBytes?.length ?? 0;
-                            ScaffoldMessenger.of(context)
-                              ..hideCurrentSnackBar()
-                              ..showSnackBar(
-                                SnackBar(
-                                  duration: const Duration(seconds: 1),
-                                  content: Text(
-                                    'Kopyalandı: $count resim (hepsi)',
-                                  ),
-                                ),
-                              );
-                          }
+                        ? () => widget.onEntryTap(e)
                         : null,
                     onOpen: e.type == ClipboardEntryType.url
-                        ? () => onEntryOpen(e)
+                        ? () => widget.onEntryOpen(e)
                         : null,
-                    onDelete: () => provider.removeById(e.id),
+                    onDelete: () => _delete(e),
                   ),
                 ),
               );

@@ -28,11 +28,11 @@ void main() {
       final sub = service.entries.listen(received.add);
 
       service.start();
-      await Future.delayed(const Duration(milliseconds: 60));
+      await Future<void>.delayed(const Duration(milliseconds: 60));
       expect(received, isEmpty);
 
       next = ClipboardEntry.text('hello');
-      await Future.delayed(const Duration(milliseconds: 80));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
 
       expect(received.length, 1);
       expect(received.first.text, 'hello');
@@ -52,7 +52,7 @@ void main() {
       final sub = service.entries.listen(received.add);
 
       service.start();
-      await Future.delayed(const Duration(milliseconds: 120));
+      await Future<void>.delayed(const Duration(milliseconds: 120));
 
       expect(received, isEmpty);
 
@@ -72,11 +72,11 @@ void main() {
       final sub = service.entries.listen(received.add);
 
       service.start();
-      await Future.delayed(const Duration(milliseconds: 80));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
       expect(received, isEmpty);
 
       current = ClipboardEntry.text('copied-later');
-      await Future.delayed(const Duration(milliseconds: 80));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
 
       expect(received.length, 1);
       expect(received.first.text, 'copied-later');
@@ -97,7 +97,7 @@ void main() {
       final sub = service.entries.listen(received.add);
 
       service.start();
-      await Future.delayed(const Duration(milliseconds: 120));
+      await Future<void>.delayed(const Duration(milliseconds: 120));
 
       expect(received, isEmpty);
 
@@ -117,11 +117,11 @@ void main() {
       final sub = service.entries.listen(received.add);
 
       service.start();
-      await Future.delayed(const Duration(milliseconds: 80));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
       service.stop();
-      await Future.delayed(const Duration(milliseconds: 40));
+      await Future<void>.delayed(const Duration(milliseconds: 40));
       final countAtStop = received.length;
-      await Future.delayed(const Duration(milliseconds: 120));
+      await Future<void>.delayed(const Duration(milliseconds: 120));
 
       expect(received.length, countAtStop);
 
@@ -146,7 +146,7 @@ void main() {
       final sub = service.entries.listen(received.add);
 
       service.start();
-      await Future.delayed(const Duration(milliseconds: 120));
+      await Future<void>.delayed(const Duration(milliseconds: 120));
 
       // Exactly one read: the first tick establishes the baseline counter,
       // after which the probe short-circuits every subsequent tick.
@@ -186,7 +186,7 @@ void main() {
       // Pre-prime: first hasFiles=true tick is the baseline — no resolve,
       // no emission. Subsequent ticks call filesReader and emit a files
       // entry exactly once (dedup catches the unchanged paths).
-      await Future.delayed(const Duration(milliseconds: 120));
+      await Future<void>.delayed(const Duration(milliseconds: 120));
       expect(
         reads,
         0,
@@ -198,7 +198,7 @@ void main() {
       expect(received.first.uris?.length, 2);
 
       hasFiles = false;
-      await Future.delayed(const Duration(milliseconds: 80));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
 
       expect(reads, greaterThanOrEqualTo(1));
 
@@ -230,7 +230,7 @@ void main() {
       // changeCount bumps every tick (modelling our macOS post-resolve
       // republish) but the resolved paths don't change — the contentHash
       // dedup keeps subsequent ticks silent.
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
       expect(received.length, 1);
       expect(filesCalls, greaterThan(1));
 
@@ -252,12 +252,12 @@ void main() {
       final sub = service.entries.listen(received.add);
 
       service.start();
-      await Future.delayed(const Duration(milliseconds: 80));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
       expect(received, isEmpty);
 
       // User switches to non-sensitive content.
       sensitive = false;
-      await Future.delayed(const Duration(milliseconds: 80));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
 
       // Sensitive path never touches _primed so the first non-sensitive
       // observation becomes the baseline — second one emits.

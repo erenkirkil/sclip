@@ -100,7 +100,7 @@ void main() {
 
     test('touched keeps identity and hash, refreshes createdAt', () async {
       final a = ClipboardEntry.text('payload');
-      await Future.delayed(const Duration(milliseconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 5));
       final t = a.touched();
       expect(t.id, a.id);
       expect(t.contentHash, a.contentHash);
@@ -172,7 +172,7 @@ void main() {
       final a = Uint8List.fromList([1, 2, 3]);
       final b = Uint8List.fromList([4, 5, 6]);
       final e = ClipboardEntry.imageSet([a, b]);
-      await Future.delayed(const Duration(milliseconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 5));
       final t = e.touched();
       expect(t.id, e.id);
       expect(t.contentHash, e.contentHash);
@@ -201,7 +201,7 @@ void main() {
     test('pdf touched preserves bytes, hash, and id', () async {
       final bytes = Uint8List.fromList([9, 8, 7]);
       final e = ClipboardEntry.pdf(bytes);
-      await Future.delayed(const Duration(milliseconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 5));
       final t = e.touched();
       expect(t.id, e.id);
       expect(t.contentHash, e.contentHash);
@@ -242,7 +242,7 @@ void main() {
         plainText: 'snippet',
         html: '<i>snippet</i>',
       );
-      await Future.delayed(const Duration(milliseconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 5));
       final t = e.touched();
       expect(t.id, e.id);
       expect(t.contentHash, e.contentHash);
