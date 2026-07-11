@@ -527,6 +527,7 @@ class ClipboardService {
       // the clipboard hasn't been touched since our last tick, so we skip
       // all work (no IPC to super_clipboard, no decoding, no allocations).
       final state = await _stateProbe();
+      final previousChange = _lastChange;
       if (state.change != -1) {
         if (state.change == _lastChange) return;
         _lastChange = state.change;
@@ -556,7 +557,14 @@ class ClipboardService {
           return;
         }
         final paths = await _filesReader();
-        if (paths.isEmpty) return;
+        if (paths.isEmpty) {
+          // The native reader couldn't take the clipboard lock (or promise
+          // resolution failed). Rewind the counter so the next tick retries
+          // instead of permanently missing this file copy — the counter was
+          // already consumed in step 1.
+          _lastChange = previousChange;
+          return;
+        }
         // All-image file copies (Cmd+C in Finder of N PNGs, exporting an
         // imageSet from Photos, etc.) become a real imageSet entry so the
         // grid UI lights up and the per-image paste path stays available.
@@ -721,9 +729,19 @@ class ClipboardService {
 
   /// Per-entry cap for PDF payloads. 25 MB covers the vast majority of
   /// pasted documents (academic papers, invoices, reports) without letting
-  /// a single oversized payload balloon RAM — at the 30-item history cap a
-  /// PDF flood would still stay under ~750 MB resident worst-case.
+  /// a single oversized payload balloon RAM. PDFs also count toward the
+  /// history layer's total-bytes budget, so a PDF flood evicts older heavy
+  /// entries instead of accumulating.
   static const _maxPdfBytes = 25 * 1024 * 1024;
+
+  /// Per-entry cap for plain/HTML text, in UTF-16 code units (≈ bytes for
+  /// ASCII). Text was the only content type without an ingest cap — a
+  /// select-all copy of a huge log or JSON otherwise lands wholesale in
+  /// the heap (twice over for richText). Oversized payloads are dropped,
+  /// not truncated: pasting silently-corrupted content would be worse
+  /// than having no history entry, and the OS clipboard still carries
+  /// the full payload for a direct Cmd/Ctrl+V.
+  static const _maxTextChars = 2 * 1024 * 1024;
 
   /// Byte-level pre-parse check: reject SVG payloads that contain XXE /
   /// XInclude constructs before we hand them to flutter_svg. Scans only
@@ -888,6 +906,13 @@ class ClipboardService {
 
     if (hasPlain) {
       final text = await _readText(item, Formats.plainText);
+      if (text != null && text.length > _maxTextChars) {
+        debugPrint(
+          'sclip: dropping oversized text payload '
+          '(${text.length} chars > $_maxTextChars)',
+        );
+        return null;
+      }
       if (text != null && text.isNotEmpty) {
         // URL/color detection takes priority over richText even when HTML is
         // also published: copying a bare URL from a browser typically
@@ -914,7 +939,13 @@ class ClipboardService {
         }
         if (item.canProvide(Formats.htmlText)) {
           final html = await _readText(item, Formats.htmlText);
-          if (html != null && html.isNotEmpty && html != text) {
+          // Oversized HTML degrades to a plain-text entry rather than
+          // dropping the copy — the text leg is the payload the user
+          // actually selected; the markup is a fidelity bonus.
+          if (html != null &&
+              html.isNotEmpty &&
+              html != text &&
+              html.length <= _maxTextChars) {
             return ClipboardEntry.richText(plainText: text, html: html);
           }
         }
@@ -928,7 +959,7 @@ class ClipboardService {
     // for writeBack.
     if (item.canProvide(Formats.htmlText)) {
       final html = await _readText(item, Formats.htmlText);
-      if (html != null && html.isNotEmpty) {
+      if (html != null && html.isNotEmpty && html.length <= _maxTextChars) {
         final stripped = html
             .replaceAll(RegExp(r'<[^>]*>'), '')
             .replaceAll(RegExp(r'\s+'), ' ')
@@ -963,17 +994,37 @@ class ClipboardService {
     }
   }
 
+  /// Watchdog for the async super_clipboard read callbacks. If a callback
+  /// never fires (decode error routed past us, wedged native read), the
+  /// pending completer would otherwise never resolve — _tick's `finally`
+  /// wouldn't reset `_ticking`, and monitoring would silently die until
+  /// app restart. Ten seconds is generous for a local IPC read.
+  static const _readTimeout = Duration(seconds: 10);
+
   Future<String?> _readText(DataReader reader, ValueFormat<String> format) {
     final completer = Completer<String?>();
-    reader.getValue<String>(format, (value) {
-      if (!completer.isCompleted) completer.complete(value);
-    });
-    return completer.future;
+    final progress = reader.getValue<String>(
+      format,
+      (value) {
+        if (!completer.isCompleted) completer.complete(value);
+      },
+      // Without onError, a decode failure (e.g. malformed CF_HTML offsets
+      // on Windows) goes to the zone handler and onValue never fires —
+      // the exact wedge the watchdog exists for. Handle it directly.
+      onError: (e) {
+        debugPrint('sclip: text read errored for ${format.runtimeType}: $e');
+        if (!completer.isCompleted) completer.complete(null);
+      },
+    );
+    // Null progress means the value is unavailable and the callback will
+    // never be invoked (per super_clipboard docs) — resolve immediately.
+    if (progress == null && !completer.isCompleted) completer.complete(null);
+    return completer.future.timeout(_readTimeout, onTimeout: () => null);
   }
 
   Future<Uint8List?> _readBinary(DataReader reader, FileFormat format) {
     final completer = Completer<Uint8List?>();
-    reader.getFile(
+    final progress = reader.getFile(
       format,
       (file) async {
         try {
@@ -989,6 +1040,7 @@ class ClipboardService {
         if (!completer.isCompleted) completer.complete(null);
       },
     );
-    return completer.future;
+    if (progress == null && !completer.isCompleted) completer.complete(null);
+    return completer.future.timeout(_readTimeout, onTimeout: () => null);
   }
 }

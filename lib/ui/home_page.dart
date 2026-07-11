@@ -49,6 +49,11 @@ class _HomePageState extends State<HomePage> with WindowListener {
   /// previous path silently fails, so we surface a one-time banner.
   bool _accessibilityOk = !Platform.isMacOS;
 
+  /// False when no global toggle hotkey could be registered at launch —
+  /// the plugin masks per-combo failures, so this is the only signal the
+  /// user gets that the shortcut is dead (tray still works).
+  bool _hotkeyOk = true;
+
   /// When true, window stays on top and does not auto-hide on focus loss.
   /// Initial value mirrors the user's `alwaysOnTopDefault` preference but
   /// can be toggled at runtime from the tray without rewriting the pref.
@@ -116,7 +121,13 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
     _tray.init();
     // Pass the persisted hotkey through so restart survives user config.
-    _hotkey.init(preferred: widget.settings.toggleHotkey);
+    // Surface a banner when nothing could be registered — otherwise the
+    // only symptom is a shortcut that silently does nothing.
+    unawaited(
+      _hotkey.init(preferred: widget.settings.toggleHotkey).then((ok) {
+        if (mounted && ok != _hotkeyOk) setState(() => _hotkeyOk = ok);
+      }),
+    );
     _checkAccessibility();
 
     // Global Esc handler. CallbackShortcuts in the widget tree requires a
@@ -639,6 +650,13 @@ class _HomePageState extends State<HomePage> with WindowListener {
             children: [
               if (!_accessibilityOk)
                 AccessibilityBanner(onTap: _openAccessibilitySettings),
+              if (!_hotkeyOk)
+                WarningBanner(
+                  icon: Icons.keyboard_outlined,
+                  message: 'Genel kısayol kaydedilemedi.',
+                  actionLabel: 'Ayarlar\'dan değiştir',
+                  onTap: _openSettings,
+                ),
               Expanded(
                 child: HistoryList(
                   provider: _history,

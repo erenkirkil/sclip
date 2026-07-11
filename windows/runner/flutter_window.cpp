@@ -85,35 +85,74 @@ bool FlutterWindow::OnCreate() {
           // through a payload it can't usefully hand back as bytes.
           DWORD seq = GetClipboardSequenceNumber();
 
-          UINT exclude_fmt = RegisterClipboardFormatW(
+          // Registered once — the atoms never change within a session.
+          static const UINT exclude_fmt = RegisterClipboardFormatW(
               L"ExcludeClipboardContentFromMonitoring");
-          UINT history_fmt =
+          static const UINT history_fmt =
               RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
 
-          bool sensitive = false;
-          if (OpenClipboard(nullptr)) {
+          // Sequence-keyed cache: format availability can't change without
+          // a sequence bump, so an unchanged seq means the cached verdict
+          // is still valid. This keeps the 500ms idle tick completely
+          // lock-free — previously every tick took the system clipboard
+          // lock, which is exactly the contention pattern that makes other
+          // apps' copies intermittently fail.
+          static DWORD last_checked_seq = 0;
+          static bool has_cached_verdict = false;
+          static bool cached_sensitive = false;
+
+          bool sensitive;
+          if (has_cached_verdict && seq == last_checked_seq) {
+            sensitive = cached_sensitive;
+          } else {
+            bool determined = true;
+            sensitive = false;
+            // Both probes below are lock-free; the clipboard lock is only
+            // needed for the rare CanIncludeInClipboardHistory DWORD read.
             if (exclude_fmt != 0 && IsClipboardFormatAvailable(exclude_fmt)) {
               sensitive = true;
             } else if (history_fmt != 0 &&
                        IsClipboardFormatAvailable(history_fmt)) {
-              HANDLE h = GetClipboardData(history_fmt);
-              if (h != nullptr) {
-                DWORD* v = static_cast<DWORD*>(GlobalLock(h));
-                if (v != nullptr && *v == 0) {
-                  sensitive = true;
+              // Another app may hold the lock briefly (it was likely just
+              // writing this very payload) — retry before giving up.
+              bool opened = false;
+              for (int attempt = 0; attempt < 5 && !opened; ++attempt) {
+                if (attempt > 0) {
+                  std::this_thread::sleep_for(std::chrono::milliseconds(12));
                 }
-                if (v != nullptr) {
-                  GlobalUnlock(h);
+                opened = OpenClipboard(nullptr) != 0;
+              }
+              if (opened) {
+                HANDLE h = GetClipboardData(history_fmt);
+                // GlobalSize guard: a misbehaving source publishing a
+                // sub-DWORD payload must not cause an out-of-bounds read.
+                if (h != nullptr && GlobalSize(h) >= sizeof(DWORD)) {
+                  DWORD* v = static_cast<DWORD*>(GlobalLock(h));
+                  if (v != nullptr) {
+                    if (*v == 0) {
+                      sensitive = true;
+                    }
+                    GlobalUnlock(h);
+                  }
                 }
+                CloseClipboard();
+              } else {
+                // Fail closed: we couldn't verify a payload whose source
+                // explicitly asked history managers to check — treating it
+                // as sensitive skips one copy in a rare race, instead of
+                // letting a password into history. Don't cache the guess.
+                sensitive = true;
+                determined = false;
               }
             }
-            CloseClipboard();
+            if (determined) {
+              last_checked_seq = seq;
+              cached_sensitive = sensitive;
+              has_cached_verdict = true;
+            }
           }
 
-          // IsClipboardFormatAvailable is callable outside an
-          // OpenClipboard/CloseClipboard window — keep it in its own
-          // statement so the existing sensitive-check block stays
-          // unchanged.
+          // Lock-free and cheap — no need to cache.
           bool has_files = IsClipboardFormatAvailable(CF_HDROP) != 0;
 
           flutter::EncodableMap map;
@@ -137,7 +176,17 @@ bool FlutterWindow::OnCreate() {
           // resolution similar to macOS NSFilePromise and can be added
           // when a concrete user case shows up.
           std::vector<std::string> paths;
-          if (OpenClipboard(nullptr)) {
+          // Retry the lock: the copying app often still holds it right
+          // after writing. Giving up returns an empty list, which the
+          // Dart side treats as "retry next tick" rather than a miss.
+          bool opened = false;
+          for (int attempt = 0; attempt < 5 && !opened; ++attempt) {
+            if (attempt > 0) {
+              std::this_thread::sleep_for(std::chrono::milliseconds(12));
+            }
+            opened = OpenClipboard(nullptr) != 0;
+          }
+          if (opened) {
             HANDLE h = GetClipboardData(CF_HDROP);
             if (h != nullptr) {
               HDROP drop = static_cast<HDROP>(h);
@@ -345,6 +394,42 @@ bool FlutterWindow::OnCreate() {
           out[flutter::EncodableValue("displays")] =
               flutter::EncodableValue(displays);
           result->Success(flutter::EncodableValue(out));
+        } else if (call.method_name() == "probeHotkey") {
+          // Availability probe for a global hotkey: RegisterHotKey fails
+          // system-wide when any window already holds the combo, so a
+          // successful register (immediately undone) proves it is free.
+          // Needed because hotkey_manager's Windows plugin discards
+          // RegisterHotKey's return value and always reports success.
+          const auto* args =
+              std::get_if<flutter::EncodableMap>(call.arguments());
+          int mods = 0;
+          int vk = 0;
+          if (args != nullptr) {
+            auto mit = args->find(flutter::EncodableValue("modifiers"));
+            if (mit != args->end()) {
+              if (const auto* v = std::get_if<int32_t>(&mit->second)) {
+                mods = *v;
+              }
+            }
+            auto kit = args->find(flutter::EncodableValue("vk"));
+            if (kit != args->end()) {
+              if (const auto* v = std::get_if<int32_t>(&kit->second)) {
+                vk = *v;
+              }
+            }
+          }
+          if (mods == 0 || vk == 0) {
+            result->Success(flutter::EncodableValue(true));
+            return;
+          }
+          constexpr int kProbeId = 0x5C11;  // arbitrary, unused elsewhere
+          bool free = RegisterHotKey(nullptr, kProbeId,
+                                     static_cast<UINT>(mods),
+                                     static_cast<UINT>(vk)) != 0;
+          if (free) {
+            UnregisterHotKey(nullptr, kProbeId);
+          }
+          result->Success(flutter::EncodableValue(free));
         } else if (call.method_name() == "captureForeground") {
           // Called by the Dart side right before it shows sclip, so we
           // remember where the user actually was. If the capture fails
@@ -358,7 +443,13 @@ bool FlutterWindow::OnCreate() {
           // explicitly restore the captured target before sending keys so
           // we're not at the mercy of whatever Windows decides to focus
           // after our hide.
+          // Consume-once, mirroring macOS capturedFrontmostPid: a stale
+          // HWND would otherwise force-foreground an old window on a later
+          // paste path that never re-captured (e.g. show via tray →
+          // Settings → entry click) and land Ctrl+V in the wrong app. The
+          // timing-based fallback below covers uncaptured paths.
           HWND target = g_paste_target;
+          g_paste_target = nullptr;
           std::thread([target]() {
             if (target != nullptr && IsWindow(target)) {
               DWORD pid = 0;

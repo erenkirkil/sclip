@@ -367,6 +367,23 @@ class _HotkeyRecorderDialog extends StatefulWidget {
 class _HotkeyRecorderDialogState extends State<_HotkeyRecorderDialog> {
   HotKey? _captured;
 
+  /// While true, raw keystrokes are being recorded. Latches off as soon
+  /// as a combo satisfying the min-2-modifier rule lands — without the
+  /// latch, HotKeyRecorder (a global keyboard handler) captures the very
+  /// Tab/Enter presses a keyboard user needs to reach and activate
+  /// 'Kaydet', overwriting the combo and making the dialog impossible to
+  /// confirm without a mouse.
+  bool _recording = true;
+
+  static bool _isValid(HotKey hk) => (hk.modifiers?.length ?? 0) >= 2;
+
+  void _onRecorded(HotKey hk) {
+    setState(() {
+      _captured = hk;
+      if (_isValid(hk)) _recording = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -381,7 +398,7 @@ class _HotkeyRecorderDialogState extends State<_HotkeyRecorderDialog> {
           ),
           const SizedBox(height: 24),
           Container(
-            height: 64,
+            constraints: const BoxConstraints(minHeight: 64),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               border: Border.all(
@@ -389,11 +406,21 @@ class _HotkeyRecorderDialogState extends State<_HotkeyRecorderDialog> {
               ),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: HotKeyRecorder(
-              initalHotKey: widget.initial,
-              onHotKeyRecorded: (hk) => setState(() => _captured = hk),
-            ),
+            child: _recording
+                ? HotKeyRecorder(
+                    initalHotKey: widget.initial,
+                    onHotKeyRecorded: _onRecorded,
+                  )
+                : HotKeyVirtualView(hotKey: _captured!),
           ),
+          if (!_recording)
+            TextButton(
+              onPressed: () => setState(() {
+                _captured = null;
+                _recording = true;
+              }),
+              child: const Text('Yeniden kaydet'),
+            ),
         ],
       ),
       actions: [
@@ -402,7 +429,7 @@ class _HotkeyRecorderDialogState extends State<_HotkeyRecorderDialog> {
           child: const Text('Vazgeç'),
         ),
         FilledButton(
-          onPressed: _captured == null
+          onPressed: (_captured == null || !_isValid(_captured!))
               ? null
               : () => Navigator.of(context).pop(_captured),
           child: const Text('Kaydet'),

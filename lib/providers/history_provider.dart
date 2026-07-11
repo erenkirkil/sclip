@@ -37,12 +37,15 @@ class HistoryProvider extends ChangeNotifier {
   /// single oversized paste can't push the process into hundreds of MB.
   final int maxImageBytes;
 
-  /// Sum cap across all image + imageSet entries. Without this, 30 copies
-  /// of 4K screenshots (~8MB each) would sit at ~240MB resident even while
-  /// each individual entry is under [maxImageBytes]. When adding an image
-  /// entry would push the total over this limit, the oldest image-bearing
-  /// entries are evicted FIFO until the new one fits. Non-image entries
-  /// aren't counted or evicted.
+  /// Sum cap across all *heavy* entries — raw images, imageSets, PDFs and
+  /// large text/HTML/SVG strings. Without this, 30 copies of 4K
+  /// screenshots (~8MB each) would sit at ~240MB resident even while each
+  /// individual entry is under [maxImageBytes] — and PDFs (25MB per-entry
+  /// cap) used to escape the budget entirely (30 × 25MB = 750MB worst
+  /// case). When adding a heavy entry would push the total over this
+  /// limit, the oldest heavy entries are evicted FIFO until the new one
+  /// fits. Zero-weight entries (urls, colors, file URI lists) are never
+  /// counted or evicted by the budget.
   final int maxTotalImageBytes;
 
   final List<ClipboardEntry> _entries = [];
@@ -142,25 +145,36 @@ class HistoryProvider extends ChangeNotifier {
     }
   }
 
-  static bool _carriesImage(ClipboardEntry e) {
-    switch (e.type) {
-      case ClipboardEntryType.image:
-      case ClipboardEntryType.imageSet:
-        return true;
-      default:
-        return false;
-    }
-  }
+  static bool _carriesImage(ClipboardEntry e) => _imageBytesOf(e) > 0;
 
-  static int _imageBytesOf(ClipboardEntry e) {
-    switch (e.type) {
-      case ClipboardEntryType.image:
-        return e.imageBytes?.lengthInBytes ?? 0;
-      case ClipboardEntryType.imageSet:
-        return e.imagesBytes?.fold<int>(0, (s, b) => s + b.lengthInBytes) ?? 0;
-      default:
-        return 0;
-    }
+  /// Budget weight of an entry. Exhaustive on purpose — a `default:`
+  /// here is exactly how PDFs silently escaped the total budget when the
+  /// type was added; the next byte-carrying type must fail to compile
+  /// until someone decides its weight. String lengths are UTF-16 code
+  /// units, ≈ bytes for the ASCII-dominated payloads we care about.
+  static int _imageBytesOf(ClipboardEntry e) => switch (e.type) {
+    ClipboardEntryType.image => e.imageBytes?.lengthInBytes ?? 0,
+    ClipboardEntryType.imageSet =>
+      e.imagesBytes?.fold<int>(0, (s, b) => s + b.lengthInBytes) ?? 0,
+    ClipboardEntryType.pdf => e.pdfBytes?.lengthInBytes ?? 0,
+    ClipboardEntryType.svg => _stringWeight(e.text?.length),
+    ClipboardEntryType.richText => _stringWeight(
+      (e.text?.length ?? 0) + (e.richTextHtml?.length ?? 0),
+    ),
+    ClipboardEntryType.text => _stringWeight(e.text?.length),
+    // URI lists and short parsed strings — negligible by construction.
+    ClipboardEntryType.url ||
+    ClipboardEntryType.color ||
+    ClipboardEntryType.files => 0,
+  };
+
+  /// Strings below this size weigh zero: they neither strain the budget
+  /// (30 × 64KB ≈ 2MB worst case unaccounted) nor deserve to be evicted
+  /// as "heavy" victims to make room for a screenshot.
+  static const _stringWeightFloor = 64 * 1024;
+  static int _stringWeight(int? length) {
+    final n = length ?? 0;
+    return n < _stringWeightFloor ? 0 : n;
   }
 
   int _totalImageBytes() =>

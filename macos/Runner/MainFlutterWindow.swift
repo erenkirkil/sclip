@@ -15,6 +15,12 @@ class MainFlutterWindow: NSWindow {
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
 
+    // Without these, summoning sclip while a full-screen app is active
+    // forces macOS to animate away to sclip's own Space (and back again
+    // after the paste) instead of overlaying the panel — the standard
+    // clipboard-manager expectation (Maccy, Paste) is overlay.
+    self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     let clipboardChannel = FlutterMethodChannel(
