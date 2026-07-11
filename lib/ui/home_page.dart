@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -18,6 +17,7 @@ import '../services/window_positioner.dart';
 import 'accessibility_banner.dart';
 import 'history_list.dart';
 import 'settings_page.dart';
+import 'settings_window_geometry.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -129,7 +129,8 @@ class _HomePageState extends State<HomePage> with WindowListener {
         if (!mounted || ok == _hotkeyOk) return;
         if (!ok) {
           unawaited(
-            SemanticsService.announce(
+            SemanticsService.sendAnnouncement(
+              View.of(context),
               'Genel kısayol kaydedilemedi.',
               TextDirection.ltr,
             ),
@@ -196,7 +197,8 @@ class _HomePageState extends State<HomePage> with WindowListener {
         // audience most affected by broken auto-paste. Announce once on
         // the ok→broken transition (not on every re-check).
         unawaited(
-          SemanticsService.announce(
+          SemanticsService.sendAnnouncement(
+            View.of(context),
             'Otomatik yapıştırma için Accessibility izni gerek.',
             TextDirection.ltr,
           ),
@@ -320,15 +322,6 @@ class _HomePageState extends State<HomePage> with WindowListener {
     }
   }
 
-  /// Preferred settings window size on a roomy display — we cap at this
-  /// and shrink via [settingsSizeFor] when the host display is smaller
-  /// (e.g. MacBook Air as a secondary monitor). Kept deliberately tight
-  /// to preserve sclip's minimalist feel; the Settings surface fits
-  /// comfortably in 440×560 with the current sections.
-  static const _settingsPreferredSize = Size(440, 560);
-  static const _defaultWindowSize = Size(340, 460);
-  static const _defaultMinSize = Size(300, 360);
-
   Future<void> _openSettings() async {
     // Re-entry while the modal is already on screen would stack another
     // copy on top — Tray clicks don't know the app's UI state. Just bring
@@ -347,60 +340,13 @@ class _HomePageState extends State<HomePage> with WindowListener {
     }
     if (!mounted) return;
 
-    // Snapshot the current window size/position before resizing so the
-    // user's own manual layout isn't clobbered when we shrink back down.
-    final previousSize = await windowManager.getSize();
-    final previousPosition = await windowManager.getPosition();
-
-    // Size the settings window to fit the display it currently lives on.
-    // We look up the display by the window's current position (not the
-    // cursor) — Settings is typically opened from the tiny top-right
-    // tray anchor while the cursor sits elsewhere; moving to the cursor
-    // would feel like a teleport. When we can't determine the display,
-    // fall back to the preferred size and hope for the best.
-    final layout = await queryScreenLayout(_windowChannel);
-    final display = layout == null
-        ? null
-        : displayContaining(previousPosition, layout.displays);
-    final bounds = display?.visible;
-    final scale = Platform.isWindows ? (display?.scaleFactor ?? 1.0) : 1.0;
-
-    final settingsSize = bounds == null
-        ? _settingsPreferredSize
-        : settingsSizeFor(bounds, _settingsPreferredSize);
-    final settingsMinSize = Size(
-      math.min(_settingsPreferredSize.width, settingsSize.width),
-      math.min(_settingsPreferredSize.height, settingsSize.height),
-    );
-
-    // Raise the minimum first so the OS can't immediately clamp the
-    // new size down; then grow the window to its settings size.
-    await windowManager.setMinimumSize(settingsMinSize);
-    await windowManager.setSize(settingsSize);
-    // Preserve the user's anchor: if they opened sclip via the tray (top-
-    // right corner) and clicked Settings, the window should still hug the
-    // top-right after growing — not jump to the centre of the display.
-    // Clamping nudges only as much as needed to keep the bigger size
-    // inside the visible bounds. Physical clamping is used on Windows.
-    if (bounds != null) {
-      final physicalSize = Size(
-        settingsSize.width * scale,
-        settingsSize.height * scale,
-      );
-      final physicalPosition = Offset(
-        previousPosition.dx * scale,
-        previousPosition.dy * scale,
-      );
-      final clampedPhysical = clampInto(physicalPosition, physicalSize, bounds);
-      final clampedLogical = Platform.isWindows
-          ? Offset(clampedPhysical.dx / scale, clampedPhysical.dy / scale)
-          : clampedPhysical;
-
-      if (clampedLogical != previousPosition) {
-        await windowManager.setPosition(clampedLogical);
-      }
+    // Grow the window for the modal's lifetime; the returned closure
+    // conditionally restores the footprint (see SettingsWindowGeometry).
+    final restoreGeometry = await SettingsWindowGeometry.grow(_windowChannel);
+    if (!mounted) {
+      await restoreGeometry();
+      return;
     }
-    if (!mounted) return;
 
     _settingsOpen = true;
     try {
@@ -417,54 +363,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
       );
     } finally {
       _settingsOpen = false;
-      // Restore the minimal footprint. If the user manually resized the
-      // window to something larger than the default but smaller than the
-      // settings size, we treat that as intent to keep it — shrink only
-      // when the window is still at the size we just grew it to.
-      await windowManager.setMinimumSize(_defaultMinSize);
-      final sizeNow = await windowManager.getSize();
-      if (sizeNow == settingsSize) {
-        final restoreSize = previousSize == settingsSize
-            ? _defaultWindowSize
-            : previousSize;
-        await windowManager.setSize(restoreSize);
-        // Position restore is deliberately conditional on "nothing else
-        // moved us in the meantime". If the user cycled hide/show (e.g.
-        // hid with the hotkey, re-opened via tray on another display)
-        // between opening and closing settings, the current position is
-        // their latest intent — teleporting back to the A-position we
-        // captured at open time would feel like a screen jump. We detect
-        // the no-move case via the same clamped position we set on open.
-        final currentPosition = await windowManager.getPosition();
-        final expectedOpenPosition = bounds == null
-            ? previousPosition
-            : (() {
-                final physicalSize = Size(
-                  settingsSize.width * scale,
-                  settingsSize.height * scale,
-                );
-                final physicalPos = Offset(
-                  previousPosition.dx * scale,
-                  previousPosition.dy * scale,
-                );
-                final clampedPhysical = clampInto(
-                  physicalPos,
-                  physicalSize,
-                  bounds,
-                );
-                return Platform.isWindows
-                    ? Offset(
-                        clampedPhysical.dx / scale,
-                        clampedPhysical.dy / scale,
-                      )
-                    : clampedPhysical;
-              })();
-        final unmoved =
-            (currentPosition - expectedOpenPosition).distanceSquared < 1.0;
-        if (unmoved) {
-          await windowManager.setPosition(previousPosition);
-        }
-      }
+      await restoreGeometry();
     }
   }
 

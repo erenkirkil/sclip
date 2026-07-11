@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sclip/models/clipboard_entry.dart';
 import 'package:sclip/services/clipboard_service.dart';
+import 'package:sclip/services/svg_sanitizer.dart';
 
 void main() {
   // Initialized once up-front so the default state-probe can fail cleanly
@@ -277,37 +278,28 @@ void main() {
 
     test('rejects Billion Laughs (DOCTYPE + ENTITY)', () {
       expect(
-        ClipboardService.isSafeSvgPayload(fixture('billion_laughs.svg')),
+        SvgSanitizer.isSafePayload(fixture('billion_laughs.svg')),
         isFalse,
       );
     });
 
     test('rejects external entity injection (DOCTYPE + ENTITY SYSTEM)', () {
       expect(
-        ClipboardService.isSafeSvgPayload(fixture('external_entity.svg')),
+        SvgSanitizer.isSafePayload(fixture('external_entity.svg')),
         isFalse,
       );
     });
 
     test('rejects XInclude (xmlns:xi)', () {
-      expect(
-        ClipboardService.isSafeSvgPayload(fixture('xinclude.svg')),
-        isFalse,
-      );
+      expect(SvgSanitizer.isSafePayload(fixture('xinclude.svg')), isFalse);
     });
 
     test('accepts Figma-like export', () {
-      expect(
-        ClipboardService.isSafeSvgPayload(fixture('figma_like.svg')),
-        isTrue,
-      );
+      expect(SvgSanitizer.isSafePayload(fixture('figma_like.svg')), isTrue);
     });
 
     test('accepts simple icon SVG', () {
-      expect(
-        ClipboardService.isSafeSvgPayload(fixture('simple_icon.svg')),
-        isTrue,
-      );
+      expect(SvgSanitizer.isSafePayload(fixture('simple_icon.svg')), isTrue);
     });
 
     test('rejects oversized payload (>_maxSvgBytes)', () {
@@ -316,9 +308,7 @@ void main() {
       final oversized =
           '<svg xmlns="http://www.w3.org/2000/svg"><!-- $padding --></svg>';
       expect(
-        ClipboardService.isSafeSvgPayload(
-          Uint8List.fromList(oversized.codeUnits),
-        ),
+        SvgSanitizer.isSafePayload(Uint8List.fromList(oversized.codeUnits)),
         isFalse,
       );
     });

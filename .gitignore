@@ -104,3 +104,6 @@ temp/
 dist/
 *.dmg
 *.zip
+
+# FVM Version Cache
+.fvm/

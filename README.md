@@ -96,7 +96,10 @@ Download the release ZIP, extract anywhere, run `sclip.exe`. SmartScreen may war
 
 ## Build from source
 
-Requires Flutter 3.9+ on stable channel.
+Requires Flutter with Dart SDK 3.10+ (stable channel; the pinned version
+lives in [`.fvmrc`](.fvmrc) — with [fvm](https://fvm.app) installed,
+`fvm use` sets it up automatically and every `flutter` below becomes
+`fvm flutter`).
 
 ```bash
 git clone https://github.com/erenkirkil/sclip.git

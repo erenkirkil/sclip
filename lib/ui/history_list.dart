@@ -61,7 +61,11 @@ class _HistoryListState extends State<HistoryList> {
   void _delete(ClipboardEntry e) {
     widget.provider.removeById(e.id);
     unawaited(
-      SemanticsService.announce('Silindi: ${e.preview}', TextDirection.ltr),
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        'Silindi: ${e.preview}',
+        TextDirection.ltr,
+      ),
     );
   }
 

@@ -153,21 +153,19 @@ class HistoryProvider extends ChangeNotifier {
   /// until someone decides its weight. String lengths are UTF-16 code
   /// units, ≈ bytes for the ASCII-dominated payloads we care about.
   static int _imageBytesOf(ClipboardEntry e) => switch (e.type) {
-    ClipboardEntryType.image => e.imageBytes?.lengthInBytes ?? 0,
-    ClipboardEntryType.imageSet =>
+    .image => e.imageBytes?.lengthInBytes ?? 0,
+    .imageSet =>
       e.imagesBytes?.fold<int>(0, (s, b) => s + b.lengthInBytes) ?? 0,
-    ClipboardEntryType.pdf => e.pdfBytes?.lengthInBytes ?? 0,
-    ClipboardEntryType.svg => _stringWeight(e.text?.length),
-    ClipboardEntryType.richText => _stringWeight(
+    .pdf => e.pdfBytes?.lengthInBytes ?? 0,
+    .svg => _stringWeight(e.text?.length),
+    .richText => _stringWeight(
       (e.text?.length ?? 0) +
           (e.richTextHtml?.length ?? 0) +
           (e.rtfBytes?.lengthInBytes ?? 0),
     ),
-    ClipboardEntryType.text => _stringWeight(e.text?.length),
+    .text => _stringWeight(e.text?.length),
     // URI lists and short parsed strings — negligible by construction.
-    ClipboardEntryType.url ||
-    ClipboardEntryType.color ||
-    ClipboardEntryType.files => 0,
+    .url || .color || .files => 0,
   };
 
   /// Strings below this size weigh zero: they neither strain the budget

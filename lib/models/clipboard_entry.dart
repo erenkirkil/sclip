@@ -257,27 +257,27 @@ class ClipboardEntry {
 
   String _computePreview() {
     switch (type) {
-      case ClipboardEntryType.text:
-      case ClipboardEntryType.url:
-      case ClipboardEntryType.richText:
+      case .text:
+      case .url:
+      case .richText:
         final t = (text ?? '').replaceAll(_whitespaceRe, ' ').trim();
         return t.length > 120 ? '${t.substring(0, 120)}…' : t;
-      case ClipboardEntryType.color:
+      case .color:
         return text ?? '';
-      case ClipboardEntryType.image:
+      case .image:
         final fmt = imageFormat?.name.toUpperCase() ?? 'IMG';
         return '$fmt · ${_formatBytes(imageBytes?.lengthInBytes ?? 0)}';
-      case ClipboardEntryType.imageSet:
+      case .imageSet:
         final count = imagesBytes?.length ?? 0;
         final total =
             imagesBytes?.fold<int>(0, (sum, b) => sum + b.lengthInBytes) ?? 0;
         return '$count resim · ${_formatBytes(total)}';
-      case ClipboardEntryType.svg:
+      case .svg:
         final bytes = (text ?? '').length;
         return 'SVG · ${bytes}B';
-      case ClipboardEntryType.pdf:
+      case .pdf:
         return 'PDF · ${_formatBytes(pdfBytes?.lengthInBytes ?? 0)}';
-      case ClipboardEntryType.files:
+      case .files:
         final list = uris ?? const <Uri>[];
         final n = list.length;
         if (n == 0) return 'Dosya yok';

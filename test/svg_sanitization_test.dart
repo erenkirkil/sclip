@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sclip/services/clipboard_service.dart';
+import 'package:sclip/services/svg_sanitizer.dart';
 
 Uint8List _load(String name) {
   final f = File('test/fixtures/malicious_svg/$name');
@@ -12,28 +12,22 @@ Uint8List _load(String name) {
 void main() {
   group('isSafeSvgPayload — malicious fixtures rejected', () {
     test('billion laughs (recursive ENTITY expansion)', () {
-      expect(
-        ClipboardService.isSafeSvgPayload(_load('billion_laughs.svg')),
-        isFalse,
-      );
+      expect(SvgSanitizer.isSafePayload(_load('billion_laughs.svg')), isFalse);
     });
 
     test('external entity (SYSTEM file reference)', () {
-      expect(
-        ClipboardService.isSafeSvgPayload(_load('external_entity.svg')),
-        isFalse,
-      );
+      expect(SvgSanitizer.isSafePayload(_load('external_entity.svg')), isFalse);
     });
 
     test('XInclude injection', () {
-      expect(ClipboardService.isSafeSvgPayload(_load('xinclude.svg')), isFalse);
+      expect(SvgSanitizer.isSafePayload(_load('xinclude.svg')), isFalse);
     });
 
     test('payload above 20 MB hard cap', () {
       // Build 21 MB of benign SVG-ish bytes — content is irrelevant because
       // the size check short-circuits before inspection.
       final big = Uint8List(21 * 1024 * 1024);
-      expect(ClipboardService.isSafeSvgPayload(big), isFalse);
+      expect(SvgSanitizer.isSafePayload(big), isFalse);
     });
 
     test('ATTLIST declaration', () {
@@ -41,23 +35,17 @@ void main() {
         '<?xml version="1.0"?>\n<!ATTLIST foo bar CDATA #IMPLIED>\n<svg/>'
             .codeUnits,
       );
-      expect(ClipboardService.isSafeSvgPayload(bytes), isFalse);
+      expect(SvgSanitizer.isSafePayload(bytes), isFalse);
     });
   });
 
   group('isSafeSvgPayload — legitimate fixtures accepted', () {
     test('simple icon', () {
-      expect(
-        ClipboardService.isSafeSvgPayload(_load('simple_icon.svg')),
-        isTrue,
-      );
+      expect(SvgSanitizer.isSafePayload(_load('simple_icon.svg')), isTrue);
     });
 
     test('figma-style export with gradient + defs', () {
-      expect(
-        ClipboardService.isSafeSvgPayload(_load('figma_like.svg')),
-        isTrue,
-      );
+      expect(SvgSanitizer.isSafePayload(_load('figma_like.svg')), isTrue);
     });
 
     test('multi-MB payload of legitimate SVG path data', () {
@@ -71,7 +59,7 @@ void main() {
       final bytes = Uint8List.fromList(doc.codeUnits);
       expect(bytes.length, greaterThan(1024 * 1024));
       expect(bytes.length, lessThan(20 * 1024 * 1024));
-      expect(ClipboardService.isSafeSvgPayload(bytes), isTrue);
+      expect(SvgSanitizer.isSafePayload(bytes), isTrue);
     });
   });
 
@@ -79,7 +67,7 @@ void main() {
     test(
       'empty payload is technically safe (ingestion discards separately)',
       () {
-        expect(ClipboardService.isSafeSvgPayload(Uint8List(0)), isTrue);
+        expect(SvgSanitizer.isSafePayload(Uint8List(0)), isTrue);
       },
     );
 
@@ -87,7 +75,7 @@ void main() {
       // allowMalformed decoding should keep the scan from crashing on
       // garbage bytes; the resulting text just won't contain our markers.
       final bytes = Uint8List.fromList([0xFF, 0xFE, 0x00, 0x00, 0x80, 0x81]);
-      expect(() => ClipboardService.isSafeSvgPayload(bytes), returnsNormally);
+      expect(() => SvgSanitizer.isSafePayload(bytes), returnsNormally);
     });
   });
 }
