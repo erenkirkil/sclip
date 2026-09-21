@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, v2, quality-refactor, "sprint-*"]
+    branches: [main, test, "v*"]
   pull_request:
-    branches: [main, v2]
+    branches: [main, test, "v*"]
 
 jobs:
   analyze-and-test:
