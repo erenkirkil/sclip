@@ -10,13 +10,20 @@ check() { echo "  ✓ $1"; ((PASS++)) || true; }
 warn()  { echo "  ⚠ $1"; WARNS+=("$1"); }
 fail()  { echo "  ✗ $1"; ((FAIL++)) || true; }
 
+# The gate runs whatever `flutter`/`dart` is on PATH; that SDK must satisfy
+# the `sdk: ^3.10.0` floor in pubspec.yaml. Both stay overridable so a
+# pinned toolchain can be routed in without editing this script, e.g.
+# FLUTTER="fvm flutter" DART="fvm dart" ./scripts/verify.sh
+FLUTTER="${FLUTTER:-flutter}"
+DART="${DART:-dart}"
+
 echo "=== sclip verify ==="
 echo
 
 echo "[ Format ]"
 # --output=none keeps the check read-only; without it dart format rewrites
 # files in place, which makes a "verify" step destructive.
-if dart format --output=none --set-exit-if-changed lib test >/dev/null 2>&1; then
+if $DART format --output=none --set-exit-if-changed lib test >/dev/null 2>&1; then
   check "no formatting drift"
 else
   warn "formatting drift (run: dart format lib test)"
@@ -24,7 +31,7 @@ fi
 echo
 
 echo "[ Analyzer ]"
-if flutter analyze --fatal-warnings 2>&1 | tee /tmp/sclip_analyze.txt | grep -q '^No issues found'; then
+if $FLUTTER analyze --fatal-warnings 2>&1 | tee /tmp/sclip_analyze.txt | grep -q '^No issues found'; then
   check "clean"
 else
   errors=$(grep -c ' error •' /tmp/sclip_analyze.txt 2>/dev/null || true)
@@ -38,7 +45,7 @@ fi
 echo
 
 echo "[ Tests ]"
-if flutter test 2>&1 | tee /tmp/sclip_test.txt | tail -1 | grep -q 'All tests passed'; then
+if $FLUTTER test 2>&1 | tee /tmp/sclip_test.txt | tail -1 | grep -q 'All tests passed'; then
   check "all tests passing"
 else
   failing=$(grep -c '^  FAILED\|^FAILED' /tmp/sclip_test.txt 2>/dev/null || true)
