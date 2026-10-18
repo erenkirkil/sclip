@@ -50,6 +50,7 @@ $RECYCLE.BIN/
 build/
 /build/
 /coverage/
+legacy/flutter/coverage/
 pubspec.lock.bak
 **/doc/api/
 **/generated_plugin_registrant.dart
