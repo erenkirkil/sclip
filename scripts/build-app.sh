@@ -13,6 +13,14 @@ esac
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PKG="$ROOT/mac"
 APP="$ROOT/dist/build/sclip.app"
+STRINGS="$ROOT/spec/strings.tr.json"
+
+# Metin kataloğu zorunlu: uygulama tüm kullanıcıya görünen metinleri buradan okur.
+# Derleme ve eski paketi silmeden önce denetlenir; yoksa hiçbir şey değişmez.
+if [[ ! -f "$STRINGS" ]]; then
+  echo "HATA: spec/strings.tr.json bulunamadı; metin kataloğu olmadan paket üretilmez." >&2
+  exit 1
+fi
 
 if [[ "$CONFIG" == "release" ]]; then
   ENTITLEMENTS="$PKG/Resources/sclip.entitlements"
@@ -29,10 +37,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/sclip" "$APP/Contents/MacOS/sclip"
 cp "$PKG/Resources/Info.plist" "$APP/Contents/Info.plist"
 cp "$PKG/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
-# Metin kataloğu Task 7'de eklenir; o zamana dek yokluğu hata değildir.
-if [[ -f "$ROOT/spec/strings.tr.json" ]]; then
-  cp "$ROOT/spec/strings.tr.json" "$APP/Contents/Resources/strings.tr.json"
-fi
+cp "$STRINGS" "$APP/Contents/Resources/strings.tr.json"
 
 codesign --force --sign - --entitlements "$ENTITLEMENTS" "$APP"
 codesign --verify --strict "$APP"

@@ -1,0 +1,111 @@
+{
+  "app.title": "sclip",
+
+  "toolbar.search": "Ara",
+  "toolbar.clear_all": "Hepsini sil",
+  "toolbar.settings": "Ayarlar",
+
+  "common.cancel": "Vazgeç",
+
+  "search.placeholder": "Geçmişte ara",
+  "search.close": "Aramayı kapat",
+  "search.empty.no_history": "Henüz içerik yok — bir şey kopyala",
+  "search.empty.no_results": "'{query}' için sonuç yok",
+
+  "row.open": "Tarayıcıda aç",
+  "row.delete": "Sil",
+  "row.paste_all": "Hepsini yapıştır",
+
+  "clear_all.title": "Geçmişi sil",
+  "clear_all.body.all": "Tüm pano geçmişi silinecek. Emin misin?",
+  "clear_all.body.filtered": "Filtre aktif: görünen {visible} değil, tümü ({total}) silinecek. Emin misin?",
+  "clear_all.confirm": "Hepsini sil",
+
+  "time.now": "şimdi",
+  "time.minutes_ago": "{n}dk önce",
+  "time.hours_ago": "{n}sa önce",
+
+  "size.kilobytes": "{n}KB",
+  "size.megabytes": "{n}MB",
+
+  "preview.image": "{format} · {size}",
+  "preview.image.unknown_format": "IMG",
+  "preview.image_set": "{n} resim · {size}",
+  "preview.svg": "SVG · {n}B",
+  "preview.pdf": "PDF · {size}",
+  "preview.files.none": "Dosya yok",
+  "preview.files.multi": "{n} dosya: {names}",
+  "preview.files.more": " + {k} daha",
+  "image_set.footer": "{preview} · {time}",
+
+  "a11y.kind.color": "Renk",
+  "a11y.kind.svg": "SVG görsel",
+  "a11y.kind.image": "Resim",
+  "a11y.kind.image_set": "Resim grubu",
+  "a11y.kind.url": "Bağlantı",
+  "a11y.kind.files": "Dosya",
+  "a11y.kind.pdf": "PDF",
+  "a11y.kind.rich_text": "Biçimli metin",
+  "a11y.kind.text": "Metin",
+  "a11y.image_set.thumb": "Resim {n} / {total} — yapıştır",
+  "a11y.announce.deleted": "Silindi: {preview}",
+
+  "banner.accessibility.message": "Otomatik yapıştırma için Accessibility izni gerek.",
+  "banner.accessibility.action": "Ayarları aç",
+  "banner.hotkey.message": "Genel kısayol kaydedilemedi.",
+  "banner.hotkey.action": "Ayarlar'dan değiştir",
+  "banner.lock_cleared.message": "Ekran kilidinde geçmiş temizlendi",
+  "banner.lock_cleared.action": "Tamam",
+
+  "settings.title": "Ayarlar",
+  "settings.close": "Kapat",
+  "settings.reset.button": "Sıfırla",
+  "settings.reset.title": "Varsayılanlara sıfırla",
+  "settings.reset.body": "Tüm ayarlar varsayılan değerlere dönecek. Pano geçmişi etkilenmez.",
+  "settings.reset.confirm": "Sıfırla",
+
+  "settings.section.shortcuts": "Kısayollar",
+  "settings.section.appearance": "Görünüm",
+  "settings.section.history": "Geçmiş",
+  "settings.section.window": "Pencere",
+  "settings.section.advanced": "Gelişmiş",
+
+  "settings.toggle_hotkey.title": "Pano aç/kapa",
+  "settings.toggle_hotkey.change": "Değiştir",
+  "settings.toggle_hotkey.recording": "Kaydediliyor…",
+  "settings.hotkey.error.min_modifiers": "En az 2 modifier (Cmd/Ctrl/Alt/Shift) + bir tuş gerekli.",
+  "settings.hotkey.error.in_use": "Bu kombinasyon başka bir uygulama tarafından kullanılıyor.",
+
+  "settings.theme.system": "Sistem",
+  "settings.theme.light": "Açık",
+  "settings.theme.dark": "Koyu",
+
+  "settings.max_items.title": "Maksimum öğe sayısı",
+  "settings.max_items.subtitle": "{n} öğe",
+  "settings.sensitive_filter.title": "Hassas içerik filtresi",
+  "settings.sensitive_filter.subtitle.on": "1Password/Bitwarden gibi uygulamalardan gelen şifreler yakalanmaz.",
+  "settings.sensitive_filter.subtitle.off": "Uyarı: hassas içerik geçmişe düşebilir.",
+  "settings.clear_on_screen_lock.title": "Ekran kilitlendiğinde geçmişi temizle",
+  "settings.clear_on_screen_lock.subtitle": "Kilidi açtığında geçmiş boş olur. Panonun kendisi ve geçici dosyalar korunur — Cmd/Ctrl+V çalışmaya devam eder.",
+
+  "settings.auto_hide_on_blur.title": "Odak kaybında gizle",
+  "settings.auto_hide_on_blur.subtitle": "Başka bir uygulamaya tıklayınca sclip otomatik gizlenir.",
+  "settings.always_on_top.title": "Üste sabitle",
+  "settings.always_on_top.subtitle": "Pencere her zaman diğer uygulamaların üstünde kalır. Tray menüsüyle senkron.",
+
+  "settings.polling_interval.title": "Polling aralığı",
+  "settings.polling_interval.value": "{n} ms",
+  "settings.clear_on_startup.title": "Başlangıçta geçmişi temizle",
+  "settings.clear_on_startup.subtitle": "Uygulama açılırken önceki oturumun belleği zaten uçar — bu, açılış anını garantiler.",
+
+  "hotkey_recorder.title": "Kısayolu kaydet",
+  "hotkey_recorder.body": "İstediğin tuş kombinasyonuna bas. En az 2 modifier (Cmd/Ctrl/Alt/Shift) + bir tuş gerekli.",
+  "hotkey_recorder.rerecord": "Yeniden kaydet",
+  "hotkey_recorder.save": "Kaydet",
+
+  "tray.toggle": "Göster / Gizle",
+  "tray.pin": "Üste sabitle",
+  "tray.clear_all": "Hepsini Sil",
+  "tray.settings": "Ayarlar…",
+  "tray.quit": "Çıkış"
+}
