@@ -19,7 +19,7 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 | `pollingIntervalMs` varsayılanı | 250 ms (izinli: 250 / 500 / 1000; yalnız macOS) | B-6.6.9, B-8.8.1 |
 | `enterReleaseCapMs` | 500 ms | B-7.1.6 |
 | `trayBlurWindowMs` | 200 ms (Windows) | B-7.1.9 |
-| `pasteDelayAfterOrderOutMs` | TBD (Task 9 spike) (macOS) | B-7.2.2 |
+| `pasteDelayAfterOrderOutMs` | 20 ms (macOS; TextEdit'te 0/10/20/30/50 ms'nin her biri 20/20; Safari/VS Code/Terminal ölçülmedi (Faz 5)) | B-7.2.2 |
 | `foregroundVerifyCapMs` | ~120 ms (Windows) | B-7.2.5 |
 | `panelCursorOffset` | 12 pt (imlecin altına) | B-6.1.5 |
 | `panelScreenMargin` | 8 pt | B-6.1.5 |
@@ -205,7 +205,8 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
   bittiğinde `[hotkey_recorder.rerecord]`; düğmeler `[common.cancel]` / `[hotkey_recorder.save]` (geçerli kombo yokken
   pasif).
 - **B-6.6.15** 2'den az modifiyerli kombo reddedilir: `[settings.hotkey.error.min_modifiers]`. Kayıt başarısızsa
-  önceki kombo geri yüklenir ve `[settings.hotkey.error.in_use]` gösterilir.
+  önceki kombo geri yüklenir; (Windows) `[settings.hotkey.error.in_use]` gösterilir, (macOS) bu metin gösterilmez
+  (B-6.8.5).
 - **B-6.6.16** `alwaysPastePlainText` (bool; false), Geçmiş altında: `[settings.always_paste_plain_text.title]`,
   alt metin `[settings.always_paste_plain_text.subtitle]`. Anahtar `sclip.settings.alwaysPastePlainText`. Açıkken
   richText öğeler yalnız düz metin olarak yapıştırılır (`plainOnly`, B-8.9.1); diğer tiplerde etkisi yoktur.
@@ -227,15 +228,22 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 - **B-6.8.3** Hiçbir kombo kaydedilemezse hotkey şeridi gösterilir ve `[banner.hotkey.message]` ekran okuyucuya bir kez
   duyurulur.
 - **B-6.8.4** Ayarlar fiilen kayıtlı komboyu gösterir (fallback'e düşüldüyse onu) (E11).
+- **B-6.8.5** (macOS) Başka süreçle çakışma tespit edilemez: Carbon `RegisterEventHotKey` başka uygulamanın tuttuğu
+  komboda da başarı döndürür ve olay iki sürece de gidebilir. "Kayıt başarısız" yalnız kendi kayıt çağrımızın hata
+  döndürmesidir; B-6.8.1 fallback zinciri ve hotkey şeridi (B-6.9.3) yalnız bu durumda devreye girer.
+  `[settings.hotkey.error.in_use]` yalnız Windows'ta kullanılır.
 
 ## 6.9 Şeritler
 
 - **B-6.9.1** (macOS) Erişilebilirlik şeridi: `[banner.accessibility.message]` · `[banner.accessibility.action]`
-  (sistem Accessibility ayarlarını açar). Accessibility izni yokken görünür.
+  (sistemin klavye denetimi izin bölmesini açar; bölmenin adı sürüme göre değişir: macOS 27 "Aygıt Denetimi ve Veri
+  Erişimi" (ölçüldü), macOS 15 "Erişilebilirlik" (varsayım, Faz 5'te doğrulanır)). İzin (`AXIsProcessTrusted`)
+  yokken görünür.
 - **B-6.9.2** (macOS) İzin yokken 1 sn'de bir ve her gösterim/odakta kontrol edilir; izin gelince şerit kendiliğinden
   kalkar. İzin var → yok geçişinde `[banner.accessibility.message]` bir kez duyurulur.
 - **B-6.9.3** Hotkey şeridi: `[banner.hotkey.message]` · `[banner.hotkey.action]` (ayarları açar). Hotkey kayıtlı
-  değilken görünür; başarılı yeniden kayıtta kalkar (E11).
+  değilken görünür; başarılı yeniden kayıtta kalkar (E11). (macOS) "kayıtlı değil" yalnız kendi kayıt çağrımızın
+  hatasıdır (B-6.8.5).
 - **B-6.9.4** Kilit şeridi: `[banner.lock_cleared.message]` · `[banner.lock_cleared.action]` (şeridi kapatır). Yalnız
   ekran kilidi **boş olmayan** bir geçmişi gerçekten temizlediyse gösterilir.
 - **B-6.9.5** Şeridin erişilebilirlik adı `mesaj + " " + eylem`'dir.
@@ -270,7 +278,8 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 - **B-7.1.7** Gizleme anındadır; gizlemeden önce tuş bırakma beklenmez (E2). (macOS) gizleme `orderOut`,
   `animationBehavior = .none`; panel `.nonactivatingPanel`'dir, önceki uygulama aktifliğini kaybetmez (E3).
 - **B-7.1.8** `blur` @ `shown` → `autoHideOnBlur` açık ve sabitleme kapalıysa gizle → `hidden`. `blur` @ `pasting`
-  yok sayılır (E9).
+  yok sayılır (E9). (macOS) `blur` = panelin key durumunu kaybetmesi (`windowDidResignKey`); `NSApp.isActive`'ten
+  asla çıkarılmaz (panel key iken ön plan uygulaması değişmese de `true` döner).
 - **B-7.1.9** (Windows) Durum makinesi blur ile gizlediği anı tutar; ≤ 200 ms içinde gelen tepsi tıklaması "zaten
   gizlendi" sayılır ve paneli yeniden açmaz (E7).
 - **B-7.1.10** Sentetik yapıştırma fiziksel modifiyerlerden bağımsız olarak yalnız Cmd/Ctrl + V taşır (macOS CGEvent
@@ -431,7 +440,8 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
   başlangıçta temizle, kilit temizliği) aynı işlemi yapar: depo `clear` (B-8.7.6), arama sorgusu temizlenir (çubuk
   açıksa açık kalır), temel çizgi = o anki sayaç, imza dedup'ı sıfırlanır; sonraki ilk sayaç değişimi yakalanır (E20).
 - **B-8.8.10** Ekran kilidi olay tabanlıdır (Windows `WTS_SESSION_LOCK`, macOS `com.apple.screenIsLocked`); UAC istemi
-  kilit sayılmaz (E32). `clearOnScreenLock` açıksa kilit kenarında geçmiş RAM'den temizlenir.
+  kilit sayılmaz (E32). (macOS) yalnız dağıtık bildirim (`DistributedNotificationCenter`) dinlenir; yoklama
+  yapılmaz. `clearOnScreenLock` açıksa kilit kenarında geçmiş RAM'den temizlenir.
 - **B-8.8.11** `clearOnStartup` açıksa açılışta geçmiş temizlenir.
 
 ## 8.9 Geri yazma (yapıştırma)

@@ -50,7 +50,7 @@
   "a11y.image_set.thumb": "Resim {n} / {total} — yapıştır",
   "a11y.announce.deleted": "Silindi: {preview}",
 
-  "banner.accessibility.message": "Otomatik yapıştırma için Accessibility izni gerek.",
+  "banner.accessibility.message": "Otomatik yapıştırma için sistem ayarlarında klavye denetimi izni gerekli.",
   "banner.accessibility.action": "Ayarları aç",
   "banner.hotkey.message": "Genel kısayol kaydedilemedi.",
   "banner.hotkey.action": "Ayarlar'dan değiştir",
