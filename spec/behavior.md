@@ -26,7 +26,8 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 | Panel varsayılan / asgari boyut | 260×340 / 220×260 pt | B-6.1.1 |
 | `previewMaxCodePoints` | 120 kod noktası | B-6.4.5 |
 | `searchIndexMaxChars` | 8192 karakter | B-6.5.5 |
-| Metin / HTML / RTF sınırı | 2 000 000 karakter | B-8.6.1 |
+| Metin / HTML sınırı | 2 097 152 karakter (UTF-16 birimi; Flutter `maxTextChars`) | B-8.6.1 |
+| RTF eşlikçi sınırı | 2 097 152 bayt | B-8.6.1 |
 | SVG sınırı | 20 MiB | B-8.6.2 |
 | PDF sınırı (bayt yolu) | 25 MiB | B-8.6.3 |
 | Görsel / imageSet toplam sınırı | 25 MiB | B-8.6.4 |
@@ -148,15 +149,18 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 - **B-6.5.1** Arama Cmd+F ya da `[toolbar.search]` ile açılır; çubuk listenin üstünde, liste görünümünün dışındadır.
   Yer tutucu `[search.placeholder]`, kapat düğmesi `[search.close]`.
 - **B-6.5.2** Panel gizlenince sorgu temizlenir, çubuk açık kalır; sonraki gösterimde odak arama kutusuna gelir.
-- **B-6.5.3** Normalizasyon sırası: (1) `I`, `İ`, `ı` → `i`; (2) Unicode küçük harf; (3) boşluk (U+0020, U+0009–U+000D,
-  U+00A0) dizileri tek U+0020'ye, baştaki ve sondaki boşluk atılır; (4) `ş→s`, `ğ→g`, `ü→u`, `ö→o`, `ç→c`, `â→a`,
-  `î→i`, `û→u`.
+- **B-6.5.3** Normalizasyon sırası: (1) `I`, `İ`, `ı` → `i`; (2) skaler başına basit Unicode küçük harf eşlemesi
+  (bağlama duyarlı kural yok: Yunanca son sigma uygulanmaz, `ΟΔΟΣ` → `οδοσ`; Dart `toLowerCase` ile aynı);
+  (3) boşluk (U+0020, U+0009–U+000D, U+00A0) dizileri tek U+0020'ye, baştaki ve sondaki boşluk atılır;
+  (4) `ş→s`, `ğ→g`, `ü→u`, `ö→o`, `ç→c`, `â→a`, `î→i`, `û→u`.
 - **B-6.5.4** Eşleşme: normalize sorgu, öğenin normalize indeksinde düz alt-dizi olarak aranır. Normalize sorgu boşsa
   tüm öğeler sırayla döner.
 - **B-6.5.5** İndeks kaynağı: text / richText / color → metin (richText'te düz metin); url → görünen metin, URI
   ondan farklıysa `görünen + " " + URI`; files → `dosya` + " " + basename'ler boşlukla; image → `resim` + " " + küçük
   harf biçim adı; imageSet → `resim` + " " + tekrarsız biçim adları (ilk görülme sırası) boşlukla; pdf → `pdf`;
-  svg → `svg` (XML indekslenmez). Kaynak normalizasyondan **önce** ilk 8192 karaktere kesilir.
+  svg → `svg` (XML indekslenmez). `dosya`, `resim`, `pdf`, `svg` sözleşme sabitleridir. Kaynak normalizasyondan
+  **önce** ilk 8192 karaktere (UTF-16 birimi) kesilir; kesim bir vekil çiftini bölerse sarkan yüksek vekil atılır
+  (indeks 8191 birim olur).
 - **B-6.5.6** Filtre salt türetilmiştir; geçmiş deposunu asla değiştirmez.
 - **B-6.5.7** Boş durum (filtreli liste boşken) kırpılmış sorguya göre seçilir: kırpılmış sorgu boşsa
   `[search.empty.no_history]`; boş değilse geçmiş boş olsa bile `[search.empty.no_results]` (`{query}` = kırpılmış
@@ -288,24 +292,33 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 - **B-8.1.1** Tipler: `text`, `url`, `color`, `image`, `imageSet` (≥ 2 görsel), `svg`, `files`, `pdf`, `richText`.
   Görsel biçimleri: png, jpeg, gif, webp.
 - **B-8.1.2** Her öğe orijinal kopyalanan metni tutar (E21); url ayrıca görünen metni (e-posta/telefonda çıplak metin).
+  url'nin orijinal metni ve `uri`'si kırpılmış orijinal metindir (e-postada `mailto:` + metin, telefonda
+  `tel:+<rakamlar>`); URI normalize edilmez, tarayıcıda açarken o anda ayrıştırılır.
 - **B-8.1.3** id süreç içinde benzersiz ve monotondur, kalıcı değildir; temp dizin adı olarak kullanılabilir.
 - **B-8.1.4** Kullanma (`touch`) id'yi ve hash'i korur, zamanı yeniler, öğeyi en üste taşır.
 - **B-8.1.5** Hash = `önek + ":" + SHA-256(UTF-8(önek + ":" + değer))`'in ilk 16 küçük hex'i. Metin tabanlı önekler:
-  `t` text (orijinal metin), `u` url (URI, görünen metin hariç), `s` svg (XML), `c` color (normalize değer),
+  `t` text (orijinal metin), `u` url (kırpılmış orijinal metin; e-posta/telefonda da çıplak metin, sentezlenen
+  `mailto:` / `tel:` URI'si değil — E21), `s` svg (XML), `c` color (normalize değer),
   `r` richText (`düz + "\u0000" + html`, RTF hariç), `f` files (URI'ler `|` ile).
 - **B-8.1.6** Bayt tabanlı önekler `i` image, `p` pdf: `önek:uzunluk:özet`, özet = baytların tam SHA-256'sının ilk 16
   hex'i (E35).
-- **B-8.1.7** imageSet: `is:adet:` + sıralı `uzunluk:özet` listesinin (`|` ile) hash'i; sıraya duyarlı, biçimleri yok
-  sayar. Kesin bayt düzeni `spec/vectors/hash.json`'dadır.
+- **B-8.1.7** imageSet: `"is:" + n + ":" + hex16(sha256(utf8(join("|", uzunluk + ":" + hex16(sha256(öğe))))))`; n görsel
+  sayısı, uzunluk ondalık bayt sayısı, hex16 küçük harfli ilk 16 hex. Hash'lenen dizenin içinde önek yoktur. Sıraya
+  duyarlı, biçimleri yok sayar. Örnekler `spec/vectors/hash.json`'dadır.
 
 ## 8.2 Algılama (kırpılmış metin üzerinde, bu sırayla)
 
-- **B-8.2.1** URL: satır sonu içermeyen, ayrıştırılabilen, şeması `http` / `https` / `ftp` / `mailto` olan metin. Sınır
-  durumları `spec/vectors/detect.json` ile sabittir.
+- **B-8.2.1** URL (kendi sözdizimimiz, S8.2): kırpılmış metin büyük/küçük harf duyarsız `^(https?|ftp)://` ile başlayıp
+  ardından en az bir karakter içerir ya da `^mailto:` ile başlayıp ardından en az bir karakter içerir; metnin hiçbir
+  yerinde B-6.4.5 daraltma kümesinden karakter (boşluk, `\t`, `\r`, `\n`, NBSP, U+3000 …) yoktur. ASCII dışı
+  karakterlere izin verilir (Türkçe yollar url'dir); host/köşeli parantez doğrulaması yapılmaz. `http://`, `https:`,
+  `\r` içeren metin url değildir. `uri` kırpılmış orijinal metindir (B-8.1.2). Sınır durumları
+  `spec/vectors/detect.json` ile sabittir.
 - **B-8.2.2** Renk (hex): `#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA` (alfa sonda). `#` zorunludur (E22).
 - **B-8.2.3** Renk (rgb): `rgb()` / `rgba()`, virgüllü; kanallar 0–255'e sıkıştırılır; alfa `0`, `1` ya da `0?.d+`
-  olarak doğru ayrıştırılır (E23).
+  olarak doğru ayrıştırılır (E23). Alfa kanalı `round(a·255)`, yarı değerler sıfırdan uzağa (0.5·255 = 127.5 → 128).
 - **B-8.2.4** Renk (hsl): `hsl()` / `hsla()`, yalnız virgüllü sözdizimi, s ve l'de `%` zorunlu. İsimli renk yoktur.
+  RGB kanalları ve alfa `round(x·255)`, yarı değerler sıfırdan uzağa (127.5 → 128).
 - **B-8.2.5** Renk normalize değeri küçük harfli metindir; yalnız swatch ve hash içindir, yapıştırılmaz (E21).
 - **B-8.2.6** E-posta: `^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$` → `mailto:` URL; görünen
   metin çıplak adres.
@@ -318,21 +331,33 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 - **B-8.3.1** RTF kapısı: düz metin **ve** RTF birlikteyse ilk geçişte ikili problar atlanır.
 - **B-8.3.2** İkili problar (kapı kapalıysa): png → jpeg → gif → webp (ilk dolu kazanır) → SVG baytları (sanitizer +
   UTF-8) → PDF. PDF yalnız düz metin yoksa ya da boş/boşluksa denenir (E34). Sınırı aşan PDF düşer, zincir devam eder.
-- **B-8.3.3** Düz metin 2M karakteri aşarsa öğe tamamen düşer.
+  Görsel probu biçimin sihirli baytlarını doğrular; tutmayan (kesik başlık dahil) bir sonraki proba düşer (S8.3).
+  İmzalar: PNG `89 50 4E 47 0D 0A 1A 0A` (8 baytın tamamı); JPEG `FF D8 FF`; GIF `GIF87a` ya da `GIF89a`; WebP `RIFF`
+  + 4 herhangi bayt + `WEBP` (12 bayt).
+- **B-8.3.3** Düz metin 2 097 152 karakteri (UTF-16 birimi) aşarsa öğe tamamen düşer (`drop`, textTooLarge).
 - **B-8.3.4** Boş olmayan düz metinde sıra: URL → renk → e-posta → telefon → SVG işaretlemesi (sanitizer'dan geçerek)
-  → HTML varsa, metinden farklıysa ve sınır içindeyse `richText` (RTF eşlikçisiyle) → `text`.
+  → HTML varsa, metinden farklıysa ve sınır içindeyse `richText` (RTF eşlikçisiyle) → `text`. Yalnız boşluktan oluşan
+  düz metin boş sayılmaz: `text` öğesi olur, önizlemesi boştur (Flutter ile aynı).
 - **B-8.3.5** Yalnız HTML: etiketler `<[^>]*>` ile soyulur, boşluk sıkıştırılır; sonuç boş değilse düz metni bu olan
   `richText`.
 - **B-8.3.6** Zengin doküman geri dönüşü: kapı açıktı ve metin yolları boş çıktıysa ikili problar PDF dahil yeniden
   koşar.
-- **B-8.3.7** Çoklu öğe: hepsi görselse `imageSet` (toplam sınırı aşarsa sığan ilk görsel `image` olur); karışık
-  öğelerde en zengin tek öğe: image > svg > pdf > richText > url > color > text (eşitlikte ilk gelen).
+- **B-8.3.7** Çoklu öğe: hepsi görselse önce görsel sınırını (25 MiB) aşanlar çıkarılır; kalan ≥ 2 görselin toplamı
+  sınır içindeyse kalanlardan (sırayla) `imageSet`, değilse kalanların ilki `image`; hiçbiri kalmazsa `drop`. Karışık
+  öğelerde sınırlar içinde kalan en zengin tek öğe: image > svg > pdf > richText > url > color > text (eşitlikte ilk
+  gelen). Sınırını aşan öğe (ör. 25 MiB üstü görsel) aday sayılmaz; aynı yükteki metin/richText'i düşürmez.
 - **B-8.3.8** Dosya yolları: uzantıların hepsi png / jpg / jpeg / gif / webp, her dosya 1 bayt – sınır arası ve toplam
   sınır içindeyse sırayla okunup `image` (1) / `imageSet` (≥ 2); aksi her durumda (başka uzantı, boyut, okuma
   hatası) `files`. Finder kopyasında dosya URL'si görsel/metin temsillerinin önüne geçer.
 - **B-8.3.9** Okuyucu katmanı: macOS `public.tiff` ve Windows `CF_DIB` / `CF_DIBV5` PNG yoksa PNG'ye çevrilir; Windows
   `HTML Format`'ta yalnız `StartFragment`–`EndFragment` dilimi UTF-8 (değiştirme karakterli) okunur, bozuk başlıkta
   HTML yok sayılır. Her biçim okuması 10 sn zaman aşımlıdır.
+- **B-8.3.10** Sınır kaynaklı düşme (`drop`): (a) sınırını aşan öğeler atlanır ve sınır içinde kalan en zengin öğe
+  seçilir (B-8.3.7); yalnız hiçbir öğe sınıra sığmıyorsa düşer (tek öğede görsel 25 MiB'ı aşarsa overCap image);
+  (b) hepsi görsel çoklu öğede hiçbir görsel sınıra sığmıyorsa düşer; (c) düz metni olmayan, yalnız HTML'li öğede
+  HTML metin sınırını aşarsa düşer (textTooLarge); (d) sınırı aşan PDF'ten sonra zincir başka öğe üretmezse düşer
+  (overCap pdf); (e) 20 MiB'ı aşan SVG baytları aday değildir, zincir devam eder; başka öğe çıkmazsa düşer
+  (overCap svg). Hiçbir şey tanınmazsa sonuç `none`'dır.
 
 ## 8.4 Temp materializasyon (bilinçli RAM-only istisnası)
 
@@ -355,14 +380,14 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 
 ## 8.6 Sınırlar ve bütçe
 
-- **B-8.6.1** Düz metin / HTML / RTF: 2M karakter. Aşınca düz metin → öğe düşer; HTML → `text`'e iner; RTF → eşlikçi
-  düşer.
+- **B-8.6.1** Düz metin / HTML: 2 097 152 karakter (UTF-16 birimi); RTF eşlikçisi: 2 097 152 bayt. Sınırda kabul, bir
+  fazlasında: düz metin → öğe düşer; HTML → `text`'e iner (yalnız HTML'li öğe düşer, B-8.3.10); RTF → eşlikçi düşer.
 - **B-8.6.2** SVG: 20 MiB üstü reddedilir.
 - **B-8.6.3** PDF (bayt yolu): 25 MiB üstü düşer; Finder URI yolu bayt tutmaz.
 - **B-8.6.4** Görsel ve imageSet toplamı: 25 MiB üstü düşer; reddedilen içerik imzayı tüketmez, tekrar denenir (E25).
 - **B-8.6.5** Dosya → görsel: dosya başına ve toplam 25 MiB; aşınca `files`'a iner.
 - **B-8.6.6** Toplam ağır bütçe 150 MiB: en eski ağır öğeler düşer; bütçeden büyük tek öğe reddedilir.
-- **B-8.6.7** Ağırlık: image / imageSet / pdf bayt; svg / text karakter; richText düz + html + rtf karakter;
+- **B-8.6.7** Ağırlık: image / imageSet / pdf bayt; svg / text karakter; richText düz karakter + html karakter + rtf bayt;
   url / color / files 0. 65 536 karakter altındaki metin ağırlığı 0 sayılır.
 - **B-8.6.8** Arama indeksi 8192 karakter (B-6.5.5).
 - **B-8.6.9** Geçmiş 10 / 30 / 50 / 100, varsayılan 30, FIFO.
@@ -424,9 +449,14 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 - **B-8.10.2** Yük UTF-8 (değiştirme karakterli) çözülüp küçük harfe çevrilir; `<!doctype`, `<!entity`, `<!attlist`,
   `xmlns:xi=`, `xinclude` içeriyorsa reddedilir.
 - **B-8.10.3** Ek olarak `<script`, `<foreignobject` ve `#` ya da `data:` ile başlamayan `href` / `xlink:href` değerleri
-  reddedilir.
+  reddedilir. Öznitelik adı tam `href` ya da `xlink:href` olmalı ve önünde XML boşluğu (U+0020, U+0009, U+000A,
+  U+000D) bulunmalı; yalnız `href` ile biten adlar (`data-href`, `ns:href`) eşleşmez. `=` çevresinde boşluk olabilir.
+  Değer tırnaklıysa (`"…"` / `'…'`) tırnak içi, tırnaksızsa boşluğa ya da `>`'ye kadar olan kısımdır. Değer yalnız XML
+  boşluklarından (U+0020, U+0009, U+000D, U+000A) kırpıldıktan sonra denetlenir (NBSP kırpılmaz); boş değer reddedilir.
 - **B-8.10.4** Sanitizer hem `image/svg+xml` bayt yolunu hem düz metin `<svg>` işaretleme yolunu kapsar. Render her
   zaman sanitizer'dan sonra ve WebKit kullanılmadan yapılır.
+- **B-8.10.5** Herhangi bir NUL (0x00) baytı ya da UTF-16 BOM bayt dizisi (`FF FE`, `FE FF`) içeren yük reddedilir
+  (UTF-32 BOM'ları NUL içerdiği için kapsanır). Baştaki UTF-8 BOM'u (`EF BB BF`) güvenlidir, reddedilmez. UTF-8 dışı kodlanmış SVG'nin B-8.10.2 taramasını atlatması böyle önlenir.
 
 ## 8.11 macOS sandbox ve izinler
 
@@ -447,5 +477,12 @@ Bu kuralların vektörleri `"deviation": "<kimlik>"` ile etiketlenir.
 - **E25** — Görsel sınırı 5 → 25 MiB; reddedilen görsel imzayı tüketmez (B-8.6.4).
 - **E34** — Boş/boşluk düz metinli, RTF'siz öğede PDF probu koşar (B-8.3.2).
 - **E35** — Bayt hash'i ilk+son 64 KiB yerine tam SHA-256 (B-8.1.6).
-- **§8.10 eki** — SVG sanitizer `<script`, `<foreignobject` ve dış `href` değerlerini de reddeder (B-8.10.3).
+- **§8.10 eki** (`S8.10`) — SVG sanitizer `<script`, `<foreignobject`, dış/boş/tırnaksız `href` değerlerini ve NUL /
+  UTF-16 BOM içeren yükü de reddeder (B-8.10.3, B-8.10.5).
+- **S8.3** — Görsel probu sihirli baytları doğrular (PNG 8 bayt, JPEG `FF D8 FF`, GIF `GIF87a`/`GIF89a`, WebP
+  `RIFF`…`WEBP`); kesik/yanlış başlıklı görsel bir sonraki proba düşer (B-8.3.2).
+- **S8.2** — URL sözdizimi Dart `Uri`'den değil kendi kuralımızdan: `^(https?|ftp)://.+` / `^mailto:.+`, hiçbir yerde
+  boşluk yok, ASCII dışı serbest; `http://`, `https:`, `\r`/boşluk içeren metin url değildir (B-8.2.1).
+- **S8.6** — Sınıflandırıcı sınır/düşme anlamı: sınırı aşan öğe aday değildir, sınır içindeki en zengin öğe seçilir;
+  hiçbiri sığmazsa `drop` (aşırı büyük görsel, yalnız-HTML, SVG baytları dahil) (B-8.3.7, B-8.3.10).
 - **Başlık çubuğu** — (macOS) başlık çubuğu temanın üst çubuk rengini izlemez, native görünümü izler (B-6.1.3).

@@ -1,0 +1,616 @@
+[
+  {
+    "name": "fixture_billion_laughs",
+    "input": {
+      "fixture": "fixtures/malicious_svg/billion_laughs.svg"
+    },
+    "expect": {
+      "safe": false
+    },
+    "source": "oracle",
+    "rule": "B-8.10.2"
+  },
+  {
+    "name": "fixture_external_entity",
+    "input": {
+      "fixture": "fixtures/malicious_svg/external_entity.svg"
+    },
+    "expect": {
+      "safe": false
+    },
+    "source": "oracle",
+    "rule": "B-8.10.2"
+  },
+  {
+    "name": "fixture_xinclude",
+    "input": {
+      "fixture": "fixtures/malicious_svg/xinclude.svg"
+    },
+    "expect": {
+      "safe": false
+    },
+    "source": "oracle",
+    "rule": "B-8.10.2"
+  },
+  {
+    "name": "fixture_simple_icon",
+    "input": {
+      "fixture": "fixtures/malicious_svg/simple_icon.svg"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.2"
+  },
+  {
+    "name": "fixture_figma_like",
+    "input": {
+      "fixture": "fixtures/malicious_svg/figma_like.svg"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.2"
+  },
+  {
+    "name": "attlist_declaration",
+    "input": {
+      "utf8": "<?xml version=\"1.0\"?>\n<!ATTLIST foo bar CDATA #IMPLIED>\n<svg/>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "source": "oracle",
+    "rule": "B-8.10.2"
+  },
+  {
+    "name": "doctype_lowercase",
+    "input": {
+      "utf8": "<!doctype svg><svg></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "source": "oracle",
+    "rule": "B-8.10.2"
+  },
+  {
+    "name": "entity_without_doctype",
+    "input": {
+      "utf8": "<!ENTITY x 'y'><svg></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "source": "oracle",
+    "rule": "B-8.10.2"
+  },
+  {
+    "name": "xmlns_xi_only",
+    "input": {
+      "utf8": "<svg xmlns:xi=\"http://www.w3.org/2001/XInclude\"></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "source": "oracle",
+    "rule": "B-8.10.2"
+  },
+  {
+    "name": "xinclude_mixed_case_text",
+    "input": {
+      "utf8": "<svg><desc>XInclude</desc></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "source": "oracle",
+    "rule": "B-8.10.2"
+  },
+  {
+    "name": "doctype_after_long_comment",
+    "input": {
+      "utf8": "<!--aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--><!DOCTYPE svg><svg></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "source": "oracle",
+    "rule": "B-8.10.2"
+  },
+  {
+    "name": "empty_payload",
+    "input": {
+      "utf8": ""
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.2"
+  },
+  {
+    "name": "invalid_utf8_then_doctype",
+    "input": {
+      "concat": [
+        {
+          "b64": "/8M="
+        },
+        {
+          "utf8": "<!DOCTYPE svg><svg></svg>"
+        }
+      ]
+    },
+    "expect": {
+      "safe": false
+    },
+    "source": "oracle",
+    "rule": "B-8.10.2"
+  },
+  {
+    "name": "invalid_utf8_no_nul_no_bom_safe",
+    "input": {
+      "b64": "PHN2Z4CBww=="
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "utf8_bom_svg_safe",
+    "input": {
+      "concat": [
+        {
+          "b64": "77u/"
+        },
+        {
+          "utf8": "<svg></svg>"
+        }
+      ]
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "at_20mib_cap_accepted",
+    "input": {
+      "concat": [
+        {
+          "utf8": "<svg>"
+        },
+        {
+          "repeat": " ",
+          "count": 20971509
+        },
+        {
+          "utf8": "</svg>"
+        }
+      ]
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.1"
+  },
+  {
+    "name": "over_20mib_cap_rejected",
+    "input": {
+      "concat": [
+        {
+          "utf8": "<svg>"
+        },
+        {
+          "repeat": " ",
+          "count": 20971510
+        },
+        {
+          "utf8": "</svg>"
+        }
+      ]
+    },
+    "expect": {
+      "safe": false
+    },
+    "source": "oracle",
+    "rule": "B-8.10.1"
+  },
+  {
+    "name": "svg_invalid_utf8",
+    "input": {
+      "b64": "//4AAICB"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "utf16le_bom_doctype",
+    "input": {
+      "b64": "//48ACEARABPAEMAVABZAFAARQAgAHMAdgBnAD4APABzAHYAZwA+ADwALwBzAHYAZwA+AA=="
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "utf16be_no_bom_doctype",
+    "input": {
+      "b64": "ADwAIQBEAE8AQwBUAFkAUABFACAAcwB2AGcAPgA8AHMAdgBnAD4APAAvAHMAdgBnAD4="
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "nul_byte",
+    "input": {
+      "concat": [
+        {
+          "utf8": "<svg>"
+        },
+        {
+          "b64": "AA=="
+        },
+        {
+          "utf8": "</svg>"
+        }
+      ]
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "utf16_bom_without_nul",
+    "input": {
+      "concat": [
+        {
+          "b64": "//4="
+        },
+        {
+          "utf8": "<svg></svg>"
+        }
+      ]
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "utf16be_bom_mid_payload",
+    "input": {
+      "concat": [
+        {
+          "utf8": "<svg>"
+        },
+        {
+          "b64": "/v8="
+        },
+        {
+          "utf8": "</svg>"
+        }
+      ]
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "gen_bytes_contain_nul",
+    "input": {
+      "gen": {
+        "size": 1024,
+        "seed": 7
+      }
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "href_fragment_safe",
+    "input": {
+      "utf8": "<svg><use href=\"#a\"/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "xlink_href_fragment_safe",
+    "input": {
+      "utf8": "<svg xmlns:xlink=\"http://www.w3.org/1999/xlink\"><use xlink:href=\"#icon\"/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_data_uri_safe",
+    "input": {
+      "utf8": "<svg><image href=\"data:image/png;base64,iVBORw0KGgo=\"/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "xmlns_url_is_not_href",
+    "input": {
+      "utf8": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "fill_url_fragment_safe",
+    "input": {
+      "utf8": "<svg><rect fill=\"url(#g)\"/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_leading_space_fragment_trimmed_safe",
+    "input": {
+      "utf8": "<svg><use href=\" #a\"/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "xlink_href_leading_space_data_safe",
+    "input": {
+      "utf8": "<svg><image xlink:href=' data:image/png;base64,AA=='/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_spaces_around_equals_safe",
+    "input": {
+      "utf8": "<svg><use href = \"#a\"/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_unquoted_fragment_safe",
+    "input": {
+      "utf8": "<svg><use href=#a /></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "data_href_attribute_not_matched",
+    "input": {
+      "utf8": "<svg><g data-href=\"https://x.example/\"/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "prefixed_ns_href_not_matched",
+    "input": {
+      "utf8": "<svg><g ns1:href=\"https://x.example/\"/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "script_tag",
+    "input": {
+      "utf8": "<svg><script>alert(1)</script></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "script_tag_uppercase",
+    "input": {
+      "utf8": "<svg><SCRIPT>alert(1)</SCRIPT></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "foreign_object",
+    "input": {
+      "utf8": "<svg><foreignObject><div>x</div></foreignObject></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_https",
+    "input": {
+      "utf8": "<svg><a href=\"https://evil.example/\"><text>x</text></a></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_single_quoted_http",
+    "input": {
+      "utf8": "<svg><use href='http://x.example/y.svg#a'/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_javascript",
+    "input": {
+      "utf8": "<svg><a href=\"javascript:alert(1)\">x</a></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "xlink_href_file",
+    "input": {
+      "utf8": "<svg xmlns:xlink=\"http://www.w3.org/1999/xlink\"><image xlink:href=\"file:///etc/passwd\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_uppercase_attr_https",
+    "input": {
+      "utf8": "<svg><a HREF=\"HTTPS://evil.example/\">x</a></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_unquoted_https",
+    "input": {
+      "utf8": "<svg><a href= https://x.example/>x</a></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_empty",
+    "input": {
+      "utf8": "<svg><use href=\"\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_nbsp_not_trimmed",
+    "input": {
+      "utf8": "<svg><use href=\" #a\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_whitespace_only",
+    "input": {
+      "utf8": "<svg><use href=\"  \"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_after_newline",
+    "input": {
+      "utf8": "<svg><use\nhref=\"https://x.example/\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  }
+]

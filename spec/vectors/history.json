@@ -1,0 +1,1217 @@
+[
+  {
+    "name": "add_inserts_at_head",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "a"
+      },
+      {
+        "op": "add",
+        "ref": "b",
+        "kind": "text",
+        "text": "b"
+      }
+    ],
+    "expect": {
+      "order": [
+        "b",
+        "a"
+      ],
+      "evicted": [],
+      "results": [
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.7.4"
+  },
+  {
+    "name": "duplicate_head_is_noop",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "same"
+      },
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "same"
+      }
+    ],
+    "expect": {
+      "order": [
+        "a"
+      ],
+      "evicted": [],
+      "results": [
+        "added",
+        "duplicateHead"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.7.1"
+  },
+  {
+    "name": "readd_moves_to_head_and_evicts_old",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "a"
+      },
+      {
+        "op": "add",
+        "ref": "b",
+        "kind": "text",
+        "text": "b"
+      },
+      {
+        "op": "add",
+        "ref": "c",
+        "kind": "text",
+        "text": "c"
+      },
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "a"
+      }
+    ],
+    "expect": {
+      "order": [
+        "a",
+        "c",
+        "b"
+      ],
+      "evicted": [
+        "a"
+      ],
+      "results": [
+        "added",
+        "added",
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.7.3"
+  },
+  {
+    "name": "fifo_cap_evicts_oldest",
+    "maxItems": 10,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "v1",
+        "kind": "text",
+        "text": "1"
+      },
+      {
+        "op": "add",
+        "ref": "v2",
+        "kind": "text",
+        "text": "2"
+      },
+      {
+        "op": "add",
+        "ref": "v3",
+        "kind": "text",
+        "text": "3"
+      },
+      {
+        "op": "add",
+        "ref": "v4",
+        "kind": "text",
+        "text": "4"
+      },
+      {
+        "op": "add",
+        "ref": "v5",
+        "kind": "text",
+        "text": "5"
+      },
+      {
+        "op": "add",
+        "ref": "v6",
+        "kind": "text",
+        "text": "6"
+      },
+      {
+        "op": "add",
+        "ref": "v7",
+        "kind": "text",
+        "text": "7"
+      },
+      {
+        "op": "add",
+        "ref": "v8",
+        "kind": "text",
+        "text": "8"
+      },
+      {
+        "op": "add",
+        "ref": "v9",
+        "kind": "text",
+        "text": "9"
+      },
+      {
+        "op": "add",
+        "ref": "v10",
+        "kind": "text",
+        "text": "10"
+      },
+      {
+        "op": "add",
+        "ref": "v11",
+        "kind": "text",
+        "text": "11"
+      }
+    ],
+    "expect": {
+      "order": [
+        "v11",
+        "v10",
+        "v9",
+        "v8",
+        "v7",
+        "v6",
+        "v5",
+        "v4",
+        "v3",
+        "v2"
+      ],
+      "evicted": [
+        "v1"
+      ],
+      "results": [
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.7.4"
+  },
+  {
+    "name": "remove_fires_evict",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "a"
+      },
+      {
+        "op": "add",
+        "ref": "b",
+        "kind": "text",
+        "text": "b"
+      },
+      {
+        "op": "add",
+        "ref": "c",
+        "kind": "text",
+        "text": "c"
+      },
+      {
+        "op": "remove",
+        "ref": "b"
+      }
+    ],
+    "expect": {
+      "order": [
+        "c",
+        "a"
+      ],
+      "evicted": [
+        "b"
+      ],
+      "results": [
+        "added",
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.7.6"
+  },
+  {
+    "name": "clear_evicts_head_first",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "a"
+      },
+      {
+        "op": "add",
+        "ref": "b",
+        "kind": "text",
+        "text": "b"
+      },
+      {
+        "op": "clear"
+      }
+    ],
+    "expect": {
+      "order": [],
+      "evicted": [
+        "b",
+        "a"
+      ],
+      "results": [
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.7.6"
+  },
+  {
+    "name": "clear_empty_is_noop",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "clear"
+      }
+    ],
+    "expect": {
+      "order": [],
+      "evicted": [],
+      "results": []
+    },
+    "source": "oracle",
+    "rule": "B-8.7.6"
+  },
+  {
+    "name": "touch_moves_to_head_without_evict",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "a"
+      },
+      {
+        "op": "add",
+        "ref": "b",
+        "kind": "text",
+        "text": "b"
+      },
+      {
+        "op": "add",
+        "ref": "c",
+        "kind": "text",
+        "text": "c"
+      },
+      {
+        "op": "touch",
+        "ref": "a"
+      }
+    ],
+    "expect": {
+      "order": [
+        "a",
+        "c",
+        "b"
+      ],
+      "evicted": [],
+      "results": [
+        "added",
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.7.5"
+  },
+  {
+    "name": "touch_removed_ref_is_noop",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "a"
+      },
+      {
+        "op": "add",
+        "ref": "b",
+        "kind": "text",
+        "text": "b"
+      },
+      {
+        "op": "remove",
+        "ref": "a"
+      },
+      {
+        "op": "touch",
+        "ref": "a"
+      }
+    ],
+    "expect": {
+      "order": [
+        "b"
+      ],
+      "evicted": [
+        "a"
+      ],
+      "results": [
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.7.5"
+  },
+  {
+    "name": "touched_head_blocks_duplicate",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "a"
+      },
+      {
+        "op": "add",
+        "ref": "b",
+        "kind": "text",
+        "text": "b"
+      },
+      {
+        "op": "touch",
+        "ref": "a"
+      },
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "a"
+      }
+    ],
+    "expect": {
+      "order": [
+        "a",
+        "b"
+      ],
+      "evicted": [],
+      "results": [
+        "added",
+        "added",
+        "duplicateHead"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.7.1"
+  },
+  {
+    "name": "set_max_lower_trims_oldest_first",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "a"
+      },
+      {
+        "op": "add",
+        "ref": "b",
+        "kind": "text",
+        "text": "b"
+      },
+      {
+        "op": "add",
+        "ref": "c",
+        "kind": "text",
+        "text": "c"
+      },
+      {
+        "op": "add",
+        "ref": "d",
+        "kind": "text",
+        "text": "d"
+      },
+      {
+        "op": "add",
+        "ref": "e",
+        "kind": "text",
+        "text": "e"
+      },
+      {
+        "op": "setMax",
+        "n": 3
+      }
+    ],
+    "expect": {
+      "order": [
+        "e",
+        "d",
+        "c"
+      ],
+      "evicted": [
+        "a",
+        "b"
+      ],
+      "results": [
+        "added",
+        "added",
+        "added",
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.7.7"
+  },
+  {
+    "name": "set_max_raise_keeps_all",
+    "maxItems": 10,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "a"
+      },
+      {
+        "op": "add",
+        "ref": "b",
+        "kind": "text",
+        "text": "b"
+      },
+      {
+        "op": "setMax",
+        "n": 50
+      },
+      {
+        "op": "add",
+        "ref": "c",
+        "kind": "text",
+        "text": "c"
+      }
+    ],
+    "expect": {
+      "order": [
+        "c",
+        "b",
+        "a"
+      ],
+      "evicted": [],
+      "results": [
+        "added",
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.7.7"
+  },
+  {
+    "name": "budget_evicts_oldest_heavy_skips_weightless",
+    "maxItems": 30,
+    "budgetBytes": 3145728,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "img1",
+        "kind": "image",
+        "size": 1048576,
+        "seed": 1
+      },
+      {
+        "op": "add",
+        "ref": "t",
+        "kind": "text",
+        "text": "light text"
+      },
+      {
+        "op": "add",
+        "ref": "img2",
+        "kind": "image",
+        "size": 1048576,
+        "seed": 2
+      },
+      {
+        "op": "add",
+        "ref": "img3",
+        "kind": "image",
+        "size": 1048576,
+        "seed": 3
+      },
+      {
+        "op": "add",
+        "ref": "img4",
+        "kind": "image",
+        "size": 1048576,
+        "seed": 4
+      }
+    ],
+    "expect": {
+      "order": [
+        "img4",
+        "img3",
+        "img2",
+        "t"
+      ],
+      "evicted": [
+        "img1"
+      ],
+      "results": [
+        "added",
+        "added",
+        "added",
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.7.2"
+  },
+  {
+    "name": "budget_exact_fit_then_oversize_rejected",
+    "maxItems": 30,
+    "budgetBytes": 1048576,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "fit",
+        "kind": "image",
+        "size": 1048576,
+        "seed": 1
+      },
+      {
+        "op": "add",
+        "ref": "big",
+        "kind": "image",
+        "size": 1048577,
+        "seed": 2
+      }
+    ],
+    "expect": {
+      "order": [
+        "fit"
+      ],
+      "evicted": [],
+      "results": [
+        "added",
+        "rejected"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.6.6"
+  },
+  {
+    "name": "budget_projection_discounts_same_hash",
+    "maxItems": 30,
+    "budgetBytes": 2097152,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "img1",
+        "kind": "image",
+        "size": 1048576,
+        "seed": 1
+      },
+      {
+        "op": "add",
+        "ref": "img2",
+        "kind": "image",
+        "size": 1048576,
+        "seed": 2
+      },
+      {
+        "op": "add",
+        "ref": "img1",
+        "kind": "image",
+        "size": 1048576,
+        "seed": 1
+      }
+    ],
+    "expect": {
+      "order": [
+        "img1",
+        "img2"
+      ],
+      "evicted": [
+        "img1"
+      ],
+      "results": [
+        "added",
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.7.2"
+  },
+  {
+    "name": "pdf_counts_in_budget",
+    "maxItems": 30,
+    "budgetBytes": 2097152,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "doc",
+        "kind": "pdf",
+        "size": 1572864,
+        "seed": 1
+      },
+      {
+        "op": "add",
+        "ref": "img",
+        "kind": "image",
+        "size": 1048576,
+        "seed": 2
+      }
+    ],
+    "expect": {
+      "order": [
+        "img"
+      ],
+      "evicted": [
+        "doc"
+      ],
+      "results": [
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.6.7"
+  },
+  {
+    "name": "text_weight_floor_65536",
+    "maxItems": 30,
+    "budgetBytes": 100000,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "big1",
+        "kind": "text",
+        "repeat": "a",
+        "count": 65536
+      },
+      {
+        "op": "add",
+        "ref": "small",
+        "kind": "text",
+        "repeat": "b",
+        "count": 65535
+      },
+      {
+        "op": "add",
+        "ref": "big2",
+        "kind": "text",
+        "repeat": "c",
+        "count": 65536
+      }
+    ],
+    "expect": {
+      "order": [
+        "big2",
+        "small"
+      ],
+      "evicted": [
+        "big1"
+      ],
+      "results": [
+        "added",
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.6.7"
+  },
+  {
+    "name": "text_below_floor_never_evicted",
+    "maxItems": 30,
+    "budgetBytes": 65536,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "t1",
+        "kind": "text",
+        "repeat": "a",
+        "count": 65535
+      },
+      {
+        "op": "add",
+        "ref": "t2",
+        "kind": "text",
+        "repeat": "b",
+        "count": 65535
+      },
+      {
+        "op": "add",
+        "ref": "t3",
+        "kind": "text",
+        "repeat": "c",
+        "count": 65535
+      }
+    ],
+    "expect": {
+      "order": [
+        "t3",
+        "t2",
+        "t1"
+      ],
+      "evicted": [],
+      "results": [
+        "added",
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.6.7"
+  },
+  {
+    "name": "default_budget_150mib_exact_then_evict",
+    "maxItems": 50,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "img1",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 1
+      },
+      {
+        "op": "add",
+        "ref": "img2",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 2
+      },
+      {
+        "op": "add",
+        "ref": "img3",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 3
+      },
+      {
+        "op": "add",
+        "ref": "img4",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 4
+      },
+      {
+        "op": "add",
+        "ref": "img5",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 5
+      },
+      {
+        "op": "add",
+        "ref": "img6",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 6
+      },
+      {
+        "op": "add",
+        "ref": "img7",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 7
+      },
+      {
+        "op": "add",
+        "ref": "img8",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 8
+      },
+      {
+        "op": "add",
+        "ref": "img9",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 9
+      },
+      {
+        "op": "add",
+        "ref": "img10",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 10
+      },
+      {
+        "op": "add",
+        "ref": "img11",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 11
+      },
+      {
+        "op": "add",
+        "ref": "img12",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 12
+      },
+      {
+        "op": "add",
+        "ref": "img13",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 13
+      },
+      {
+        "op": "add",
+        "ref": "img14",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 14
+      },
+      {
+        "op": "add",
+        "ref": "img15",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 15
+      },
+      {
+        "op": "add",
+        "ref": "img16",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 16
+      },
+      {
+        "op": "add",
+        "ref": "img17",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 17
+      },
+      {
+        "op": "add",
+        "ref": "img18",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 18
+      },
+      {
+        "op": "add",
+        "ref": "img19",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 19
+      },
+      {
+        "op": "add",
+        "ref": "img20",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 20
+      },
+      {
+        "op": "add",
+        "ref": "img21",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 21
+      },
+      {
+        "op": "add",
+        "ref": "img22",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 22
+      },
+      {
+        "op": "add",
+        "ref": "img23",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 23
+      },
+      {
+        "op": "add",
+        "ref": "img24",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 24
+      },
+      {
+        "op": "add",
+        "ref": "img25",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 25
+      },
+      {
+        "op": "add",
+        "ref": "img26",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 26
+      },
+      {
+        "op": "add",
+        "ref": "img27",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 27
+      },
+      {
+        "op": "add",
+        "ref": "img28",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 28
+      },
+      {
+        "op": "add",
+        "ref": "img29",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 29
+      },
+      {
+        "op": "add",
+        "ref": "img30",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 30
+      },
+      {
+        "op": "add",
+        "ref": "img31",
+        "kind": "image",
+        "size": 5242880,
+        "seed": 31
+      }
+    ],
+    "expect": {
+      "order": [
+        "img31",
+        "img30",
+        "img29",
+        "img28",
+        "img27",
+        "img26",
+        "img25",
+        "img24",
+        "img23",
+        "img22",
+        "img21",
+        "img20",
+        "img19",
+        "img18",
+        "img17",
+        "img16",
+        "img15",
+        "img14",
+        "img13",
+        "img12",
+        "img11",
+        "img10",
+        "img9",
+        "img8",
+        "img7",
+        "img6",
+        "img5",
+        "img4",
+        "img3",
+        "img2"
+      ],
+      "evicted": [
+        "img1"
+      ],
+      "results": [
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added",
+        "added"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.6.6"
+  },
+  {
+    "name": "image_over_25mib_cap_rejected",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "t",
+        "kind": "text",
+        "text": "keep"
+      },
+      {
+        "op": "add",
+        "ref": "huge",
+        "kind": "image",
+        "size": 26214401,
+        "seed": 1
+      }
+    ],
+    "expect": {
+      "order": [
+        "t"
+      ],
+      "evicted": [],
+      "results": [
+        "added",
+        "rejected"
+      ]
+    },
+    "source": "oracle",
+    "rule": "B-8.6.4"
+  },
+  {
+    "name": "image_20mib_accepted",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "img",
+        "kind": "image",
+        "size": 20971520,
+        "seed": 1
+      }
+    ],
+    "expect": {
+      "order": [
+        "img"
+      ],
+      "evicted": [],
+      "results": [
+        "added"
+      ]
+    },
+    "deviation": "E25",
+    "source": "manual",
+    "rule": "B-8.6.4"
+  },
+  {
+    "name": "image_at_25mib_cap_accepted",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "t",
+        "kind": "text",
+        "text": "keep"
+      },
+      {
+        "op": "add",
+        "ref": "img",
+        "kind": "image",
+        "size": 26214400,
+        "seed": 2
+      }
+    ],
+    "expect": {
+      "order": [
+        "img",
+        "t"
+      ],
+      "evicted": [],
+      "results": [
+        "added",
+        "added"
+      ]
+    },
+    "deviation": "E25",
+    "source": "manual",
+    "rule": "B-8.6.4"
+  },
+  {
+    "name": "clear_then_readd_same_content_added",
+    "maxItems": 30,
+    "ops": [
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "same"
+      },
+      {
+        "op": "clear"
+      },
+      {
+        "op": "add",
+        "ref": "a",
+        "kind": "text",
+        "text": "same"
+      }
+    ],
+    "expect": {
+      "order": [
+        "a"
+      ],
+      "evicted": [
+        "a"
+      ],
+      "results": [
+        "added",
+        "added"
+      ]
+    },
+    "deviation": "E20",
+    "source": "manual",
+    "rule": "B-8.8.9"
+  }
+]

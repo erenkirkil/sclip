@@ -1,0 +1,933 @@
+[
+  {
+    "name": "url_https_simple",
+    "input": "https://example.com",
+    "expect": {
+      "kind": "url",
+      "uri": "https://example.com"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_query",
+    "input": "https://x.com/a?b=1",
+    "expect": {
+      "kind": "url",
+      "uri": "https://x.com/a?b=1"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_http_single_label_host",
+    "input": "http://x",
+    "expect": {
+      "kind": "url",
+      "uri": "http://x"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_ftp",
+    "input": "ftp://files.example.org/pub/a.txt",
+    "expect": {
+      "kind": "url",
+      "uri": "ftp://files.example.org/pub/a.txt"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_mailto",
+    "input": "mailto:a@b.c",
+    "expect": {
+      "kind": "url",
+      "uri": "mailto:a@b.c"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_port_fragment",
+    "input": "https://example.com:8080/a#frag",
+    "expect": {
+      "kind": "url",
+      "uri": "https://example.com:8080/a#frag"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_percent_encoded",
+    "input": "https://example.com/a%20b",
+    "expect": {
+      "kind": "url",
+      "uri": "https://example.com/a%20b"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_trimmed_spaces",
+    "input": "  https://example.com/path  ",
+    "expect": {
+      "kind": "url",
+      "uri": "https://example.com/path"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_trailing_newline_trimmed",
+    "input": "https://example.com\n",
+    "expect": {
+      "kind": "url",
+      "uri": "https://example.com"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_trim_nbsp",
+    "input": " https://example.com ",
+    "expect": {
+      "kind": "url",
+      "uri": "https://example.com"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_trim_bom",
+    "input": "﻿https://example.com",
+    "expect": {
+      "kind": "url",
+      "uri": "https://example.com"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_trim_nel",
+    "input": "https://example.com",
+    "expect": {
+      "kind": "url",
+      "uri": "https://example.com"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_trim_ideographic_space",
+    "input": "　https://example.com",
+    "expect": {
+      "kind": "url",
+      "uri": "https://example.com"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_internal_newline_rejected",
+    "input": "line1\nhttps://x.com",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_internal_cr_rejected",
+    "input": "https://x.com/\rfoo",
+    "expect": {
+      "kind": "none"
+    },
+    "deviation": "S8.2",
+    "source": "manual",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_empty_host_rejected",
+    "input": "http://",
+    "expect": {
+      "kind": "none"
+    },
+    "deviation": "S8.2",
+    "source": "manual",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_scheme_only_rejected",
+    "input": "https:",
+    "expect": {
+      "kind": "none"
+    },
+    "deviation": "S8.2",
+    "source": "manual",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_internal_space_rejected",
+    "input": "https://x.com/a b",
+    "expect": {
+      "kind": "none"
+    },
+    "deviation": "S8.2",
+    "source": "manual",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_internal_tab_rejected",
+    "input": "https://x.com/a\tb",
+    "expect": {
+      "kind": "none"
+    },
+    "deviation": "S8.2",
+    "source": "manual",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_internal_nbsp_rejected",
+    "input": "https://x.com/a b",
+    "expect": {
+      "kind": "none"
+    },
+    "deviation": "S8.2",
+    "source": "manual",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_scheme_then_words_rejected",
+    "input": "http: hello world",
+    "expect": {
+      "kind": "none"
+    },
+    "deviation": "S8.2",
+    "source": "manual",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_space_in_host_rejected",
+    "input": "https://exa mple.com",
+    "expect": {
+      "kind": "none"
+    },
+    "deviation": "S8.2",
+    "source": "manual",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_unclosed_ipv6_bracket_accepted",
+    "input": "https://[::1",
+    "expect": {
+      "kind": "url",
+      "uri": "https://[::1"
+    },
+    "deviation": "S8.2",
+    "source": "manual",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_turkish_path_original_kept",
+    "input": "https://x.com/ş",
+    "expect": {
+      "kind": "url",
+      "uri": "https://x.com/ş"
+    },
+    "deviation": "E21",
+    "source": "manual",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_all_caps_original_kept",
+    "input": "HTTPS://X.COM",
+    "expect": {
+      "kind": "url",
+      "uri": "HTTPS://X.COM"
+    },
+    "deviation": "E21",
+    "source": "manual",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_javascript_rejected",
+    "input": "javascript:alert(1)",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_file_scheme_rejected",
+    "input": "file:///etc/hosts",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_no_scheme_rejected",
+    "input": "www.example.com",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_ws_scheme_rejected",
+    "input": "ws://x.com",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_uppercase_scheme_original_kept",
+    "input": "HTTPS://Example.COM/Path",
+    "expect": {
+      "kind": "url",
+      "uri": "HTTPS://Example.COM/Path"
+    },
+    "deviation": "E21",
+    "source": "manual",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "url_mailto_uppercase_original_kept",
+    "input": "MAILTO:A@B.COM",
+    "expect": {
+      "kind": "url",
+      "uri": "MAILTO:A@B.COM"
+    },
+    "deviation": "E21",
+    "source": "manual",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "color_hex6",
+    "input": "#ff0000",
+    "expect": {
+      "kind": "color",
+      "normalized": "#ff0000",
+      "argb": "0xFFFF0000"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_hex6_upper",
+    "input": "#FF0000",
+    "expect": {
+      "kind": "color",
+      "normalized": "#ff0000",
+      "argb": "0xFFFF0000"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_hex3",
+    "input": "#f00",
+    "expect": {
+      "kind": "color",
+      "normalized": "#f00",
+      "argb": "0xFFFF0000"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_hex4_alpha_last",
+    "input": "#f008",
+    "expect": {
+      "kind": "color",
+      "normalized": "#f008",
+      "argb": "0x88FF0000"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_hex8_alpha_last",
+    "input": "#00ff0080",
+    "expect": {
+      "kind": "color",
+      "normalized": "#00ff0080",
+      "argb": "0x8000FF00"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_hex_trimmed",
+    "input": " #ABC ",
+    "expect": {
+      "kind": "color",
+      "normalized": "#abc",
+      "argb": "0xFFAABBCC"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_hex5_rejected",
+    "input": "#12345",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_hex_invalid_digit",
+    "input": "#ggg",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_bare_hex4_text",
+    "input": "beef",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_arabic_digits_rejected",
+    "input": "#١٢٣",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_bare_hex6_is_text",
+    "input": "ff0000",
+    "expect": {
+      "kind": "none"
+    },
+    "deviation": "E22",
+    "source": "manual",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_bare_digits_is_text",
+    "input": "123456",
+    "expect": {
+      "kind": "none"
+    },
+    "deviation": "E22",
+    "source": "manual",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_bare_word_decade_is_text",
+    "input": "decade",
+    "expect": {
+      "kind": "none"
+    },
+    "deviation": "E22",
+    "source": "manual",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_bare_hex3_is_text",
+    "input": "abc",
+    "expect": {
+      "kind": "none"
+    },
+    "deviation": "E22",
+    "source": "manual",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_bare_hex8_is_text",
+    "input": "deadbeef",
+    "expect": {
+      "kind": "none"
+    },
+    "deviation": "E22",
+    "source": "manual",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "color_rgb_spaces",
+    "input": "rgb(255, 0, 0)",
+    "expect": {
+      "kind": "color",
+      "normalized": "rgb(255, 0, 0)",
+      "argb": "0xFFFF0000"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.3"
+  },
+  {
+    "name": "color_rgb_compact",
+    "input": "rgb(0,0,255)",
+    "expect": {
+      "kind": "color",
+      "normalized": "rgb(0,0,255)",
+      "argb": "0xFF0000FF"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.3"
+  },
+  {
+    "name": "color_rgb_upper",
+    "input": "RGB(10, 20, 30)",
+    "expect": {
+      "kind": "color",
+      "normalized": "rgb(10, 20, 30)",
+      "argb": "0xFF0A141E"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.3"
+  },
+  {
+    "name": "color_rgb_clamped",
+    "input": "rgb(300, 0, 999)",
+    "expect": {
+      "kind": "color",
+      "normalized": "rgb(300, 0, 999)",
+      "argb": "0xFFFF00FF"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.3"
+  },
+  {
+    "name": "color_rgba_leading_dot_alpha",
+    "input": "rgba(255,0,0,.5)",
+    "expect": {
+      "kind": "color",
+      "normalized": "rgba(255,0,0,.5)",
+      "argb": "0x80FF0000"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.3"
+  },
+  {
+    "name": "color_rgba_alpha_one",
+    "input": "rgba(0,128,0,1)",
+    "expect": {
+      "kind": "color",
+      "normalized": "rgba(0,128,0,1)",
+      "argb": "0xFF008000"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.3"
+  },
+  {
+    "name": "color_rgba_alpha_zero",
+    "input": "rgba(0,0,0,0)",
+    "expect": {
+      "kind": "color",
+      "normalized": "rgba(0,0,0,0)",
+      "argb": "0x00000000"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.3"
+  },
+  {
+    "name": "color_rgba_alpha_two_rejected",
+    "input": "rgba(1,2,3,2)",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.3"
+  },
+  {
+    "name": "color_rgb_space_syntax_rejected",
+    "input": "rgb(1 2 3)",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.3"
+  },
+  {
+    "name": "color_rgba_zero_point_five",
+    "input": "rgba(255,0,0,0.5)",
+    "expect": {
+      "kind": "color",
+      "normalized": "rgba(255,0,0,0.5)",
+      "argb": "0x80FF0000"
+    },
+    "deviation": "E23",
+    "source": "manual",
+    "rule": "B-8.2.3"
+  },
+  {
+    "name": "color_rgba_zero_point_two_five",
+    "input": "rgba(0, 0, 255, 0.25)",
+    "expect": {
+      "kind": "color",
+      "normalized": "rgba(0, 0, 255, 0.25)",
+      "argb": "0x400000FF"
+    },
+    "deviation": "E23",
+    "source": "manual",
+    "rule": "B-8.2.3"
+  },
+  {
+    "name": "color_hsl_green",
+    "input": "hsl(120, 100%, 50%)",
+    "expect": {
+      "kind": "color",
+      "normalized": "hsl(120, 100%, 50%)",
+      "argb": "0xFF00FF00"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.4"
+  },
+  {
+    "name": "color_hsl_grey",
+    "input": "hsl(0, 0%, 50%)",
+    "expect": {
+      "kind": "color",
+      "normalized": "hsl(0, 0%, 50%)",
+      "argb": "0xFF808080"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.4"
+  },
+  {
+    "name": "color_hsla_alpha",
+    "input": "hsla(240, 100%, 50%, 0.5)",
+    "expect": {
+      "kind": "color",
+      "normalized": "hsla(240, 100%, 50%, 0.5)",
+      "argb": "0x800000FF"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.4"
+  },
+  {
+    "name": "color_hsl_deg",
+    "input": "hsl(120deg, 100%, 25%)",
+    "expect": {
+      "kind": "color",
+      "normalized": "hsl(120deg, 100%, 25%)",
+      "argb": "0xFF008000"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.4"
+  },
+  {
+    "name": "color_hsl_missing_percent_rejected",
+    "input": "hsl(120, 50, 50)",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.4"
+  },
+  {
+    "name": "color_hsl_space_syntax_rejected",
+    "input": "hsl(120 100% 50%)",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.4"
+  },
+  {
+    "name": "color_named_rejected",
+    "input": "red",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.4"
+  },
+  {
+    "name": "email_simple",
+    "input": "a@b.com",
+    "expect": {
+      "kind": "email",
+      "uri": "mailto:a@b.com"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.6"
+  },
+  {
+    "name": "email_plus_tag",
+    "input": "user.name+tag@sub.domain.org",
+    "expect": {
+      "kind": "email",
+      "uri": "mailto:user.name+tag@sub.domain.org"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.6"
+  },
+  {
+    "name": "email_trimmed",
+    "input": "  ayse@ornek.com\n",
+    "expect": {
+      "kind": "email",
+      "uri": "mailto:ayse@ornek.com"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.6"
+  },
+  {
+    "name": "email_uppercase",
+    "input": "A@B.COM",
+    "expect": {
+      "kind": "email",
+      "uri": "mailto:A@B.COM"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.6"
+  },
+  {
+    "name": "email_no_tld_rejected",
+    "input": "a@b",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.6"
+  },
+  {
+    "name": "email_trailing_word_rejected",
+    "input": "a@b.com extra",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.6"
+  },
+  {
+    "name": "email_non_ascii_local_rejected",
+    "input": "ayşe@ornek.com",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.6"
+  },
+  {
+    "name": "phone_tr",
+    "input": "+90 532 123 45 67",
+    "expect": {
+      "kind": "phone",
+      "uri": "tel:+905321234567"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.7"
+  },
+  {
+    "name": "phone_us_parens",
+    "input": "+1 (555) 010-9999",
+    "expect": {
+      "kind": "phone",
+      "uri": "tel:+15550109999"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.7"
+  },
+  {
+    "name": "phone_dots",
+    "input": "+44.20.7946.0958",
+    "expect": {
+      "kind": "phone",
+      "uri": "tel:+442079460958"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.7"
+  },
+  {
+    "name": "phone_eight_digits_min",
+    "input": "+12345678",
+    "expect": {
+      "kind": "phone",
+      "uri": "tel:+12345678"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.7"
+  },
+  {
+    "name": "phone_seven_digits_rejected",
+    "input": "+1234567",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.7"
+  },
+  {
+    "name": "phone_fifteen_digits_max",
+    "input": "+123456789012345",
+    "expect": {
+      "kind": "phone",
+      "uri": "tel:+123456789012345"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.7"
+  },
+  {
+    "name": "phone_sixteen_digits_rejected",
+    "input": "+1234567890123456",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.7"
+  },
+  {
+    "name": "phone_no_plus_rejected",
+    "input": "0532 123 45 67",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.7"
+  },
+  {
+    "name": "phone_too_short_rejected",
+    "input": "+90 123",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.7"
+  },
+  {
+    "name": "phone_zero_country_rejected",
+    "input": "+0 532 123 45 67",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.7"
+  },
+  {
+    "name": "phone_arabic_digits_rejected",
+    "input": "+٩٠٥٣٢١٢٣٤٥",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.7"
+  },
+  {
+    "name": "svg_simple",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"1\"/></svg>",
+    "expect": {
+      "kind": "svg"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.8"
+  },
+  {
+    "name": "svg_xml_prolog",
+    "input": "<?xml version=\"1.0\"?>\n<svg><rect/></svg>",
+    "expect": {
+      "kind": "svg"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.8"
+  },
+  {
+    "name": "svg_leading_whitespace",
+    "input": "\n  <svg></svg>",
+    "expect": {
+      "kind": "svg"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.8"
+  },
+  {
+    "name": "svg_uppercase_tags",
+    "input": "<SVG></SVG>",
+    "expect": {
+      "kind": "svg"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.8"
+  },
+  {
+    "name": "svg_self_closing_rejected",
+    "input": "<svg/>",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.8"
+  },
+  {
+    "name": "svg_inside_html_rejected",
+    "input": "<div><svg></svg></div>",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.8"
+  },
+  {
+    "name": "svg_prolog_svg_beyond_512_rejected",
+    "input": "<?xml version=\"1.0\"?><!--aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa--><svg></svg>",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.8"
+  },
+  {
+    "name": "svg_heuristic_ignores_doctype",
+    "input": "<?xml version=\"1.0\"?>\n<!DOCTYPE svg [\n  <!ENTITY lol \"lol\">\n  <!ENTITY lol2 \"&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;\">\n  <!ENTITY lol3 \"&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;\">\n  <!ENTITY lol4 \"&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;\">\n  <!ENTITY lol5 \"&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;\">\n]>\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\">\n  <text>&lol5;</text>\n</svg>\n",
+    "expect": {
+      "kind": "svg"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.8"
+  },
+  {
+    "name": "none_plain_text",
+    "input": "just some text",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "none_empty",
+    "input": "",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "none_whitespace_only",
+    "input": "   \n\t",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.1"
+  },
+  {
+    "name": "none_year_number",
+    "input": "2024",
+    "expect": {
+      "kind": "none"
+    },
+    "source": "oracle",
+    "rule": "B-8.2.7"
+  }
+]

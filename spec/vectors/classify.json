@@ -1,0 +1,3013 @@
+[
+  {
+    "name": "rtf_gate_skips_image_probe",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "Hello Word"
+            },
+            "text/rtf": {
+              "utf8": "{\\rtf1\\ansi Hello {\\b Word}}"
+            },
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "Hello Word",
+      "hash": "t:e815101c8330dedc",
+      "text": "Hello Word"
+    },
+    "source": "manual",
+    "rule": "B-8.3.1"
+  },
+  {
+    "name": "rtf_gate_skips_pdf_keeps_rich_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "Merhaba dünya"
+            },
+            "text/html": {
+              "utf8": "<p>Merhaba <b>dünya</b></p>"
+            },
+            "text/rtf": {
+              "utf8": "{\\rtf1\\ansi Hello {\\b Word}}"
+            },
+            "application/pdf": {
+              "utf8": "%PDF-1.4\n%%EOF\n"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "richText",
+      "preview": "Merhaba dünya",
+      "hash": "r:36f94b65a51fceb7",
+      "text": "Merhaba dünya",
+      "hasRtf": true
+    },
+    "source": "manual",
+    "rule": "B-8.3.1"
+  },
+  {
+    "name": "rich_doc_fallback_empty_text_to_image",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": ""
+            },
+            "text/rtf": {
+              "utf8": "{\\rtf1\\ansi Hello {\\b Word}}"
+            },
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "PNG · 0KB",
+      "hash": "i:74:300491311ae033d8",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.6"
+  },
+  {
+    "name": "rich_doc_fallback_empty_text_allows_pdf",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": ""
+            },
+            "text/rtf": {
+              "utf8": "{\\rtf1\\ansi Hello {\\b Word}}"
+            },
+            "application/pdf": {
+              "utf8": "%PDF-1.4\n%%EOF\n"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "pdf",
+      "preview": "PDF · 0KB",
+      "hash": "p:15:14bcd090baf31edb"
+    },
+    "source": "manual",
+    "rule": "B-8.3.6"
+  },
+  {
+    "name": "image_png_beats_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "caption"
+            },
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "PNG · 0KB",
+      "hash": "i:74:300491311ae033d8",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "image_png_beats_webp",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/webp": {
+              "fixture": "fixtures/tiny.webp"
+            },
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "PNG · 0KB",
+      "hash": "i:74:300491311ae033d8",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "image_jpeg_beats_gif",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/gif": {
+              "fixture": "fixtures/tiny.gif"
+            },
+            "image/jpeg": {
+              "fixture": "fixtures/tiny.jpg"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "JPEG · 0KB",
+      "hash": "i:804:7e5d7a0559adee7f",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "image_gif_beats_webp",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/webp": {
+              "fixture": "fixtures/tiny.webp"
+            },
+            "image/gif": {
+              "fixture": "fixtures/tiny.gif"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "GIF · 0KB",
+      "hash": "i:43:693d949d8c3fdc7f",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "image_webp_alone",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/webp": {
+              "fixture": "fixtures/tiny.webp"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "WEBP · 0KB",
+      "hash": "i:40:dacd92f889e5204f",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "image_empty_png_falls_to_next_probe",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "utf8": ""
+            },
+            "image/gif": {
+              "fixture": "fixtures/tiny.gif"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "GIF · 0KB",
+      "hash": "i:43:693d949d8c3fdc7f",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "png_truncated_header_falls_to_next_probe",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "b64": "iVBORw=="
+            },
+            "image/jpeg": {
+              "fixture": "fixtures/tiny.jpg"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "JPEG · 0KB",
+      "hash": "i:804:7e5d7a0559adee7f",
+      "imageCount": 1
+    },
+    "deviation": "S8.3",
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "png_seven_byte_prefix_falls_to_next_probe",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "b64": "iVBORw0KGg=="
+            },
+            "image/jpeg": {
+              "fixture": "fixtures/tiny.jpg"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "JPEG · 0KB",
+      "hash": "i:804:7e5d7a0559adee7f",
+      "imageCount": 1
+    },
+    "deviation": "S8.3",
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "jpeg_bad_magic_falls_to_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/jpeg": {
+              "b64": "/9j+4AE="
+            },
+            "text/plain": {
+              "utf8": "j"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "j",
+      "hash": "t:4ffc9db2a9e20030",
+      "text": "j"
+    },
+    "deviation": "S8.3",
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "gif_bad_magic_falls_to_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/gif": {
+              "b64": "R0lGODhhAQABAA=="
+            },
+            "text/plain": {
+              "utf8": "g"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "g",
+      "hash": "t:77a3a61e24024df7",
+      "text": "g"
+    },
+    "deviation": "S8.3",
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "webp_bad_magic_falls_to_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/webp": {
+              "b64": "UklGRgQAAABXRUJY"
+            },
+            "text/plain": {
+              "utf8": "w"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "w",
+      "hash": "t:42decacc7fe75ced",
+      "text": "w"
+    },
+    "deviation": "S8.3",
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "gif87a_signature_accepted",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/gif": {
+              "b64": "R0lGODdhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "GIF · 0KB",
+      "hash": "i:43:ff95b99e6cd933dc",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "png_bad_magic_falls_to_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "utf8": "not a png"
+            },
+            "text/plain": {
+              "utf8": "caption"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "caption",
+      "hash": "t:737eeaea215df2a5",
+      "text": "caption"
+    },
+    "deviation": "S8.3",
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "image_beats_svg_bytes",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/svg+xml": {
+              "fixture": "fixtures/malicious_svg/simple_icon.svg"
+            },
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "PNG · 0KB",
+      "hash": "i:74:300491311ae033d8",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "svg_bytes_safe",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/svg+xml": {
+              "fixture": "fixtures/malicious_svg/simple_icon.svg"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "svg",
+      "preview": "SVG · 252B",
+      "hash": "s:0f4264fe28992f25",
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\">\n  <circle cx=\"12\" cy=\"12\" r=\"10\" fill=\"#4a90e2\"/>\n  <path d=\"M8 12l3 3 5-6\" stroke=\"white\" stroke-width=\"2\" fill=\"none\"/>\n</svg>\n"
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "svg_bytes_beats_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "icon"
+            },
+            "image/svg+xml": {
+              "fixture": "fixtures/malicious_svg/figma_like.svg"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "svg",
+      "preview": "SVG · 525B",
+      "hash": "s:f45c32d31aeee88d",
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg width=\"100\" height=\"100\" viewBox=\"0 0 100 100\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n<rect width=\"100\" height=\"100\" rx=\"12\" fill=\"url(#paint0_linear)\"/>\n<path d=\"M30 50L45 65L70 35\" stroke=\"white\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n<defs>\n<linearGradient id=\"paint0_linear\" x1=\"0\" y1=\"0\" x2=\"100\" y2=\"100\" gradientUnits=\"userSpaceOnUse\">\n<stop stop-color=\"#6366F1\"/>\n<stop offset=\"1\" stop-color=\"#8B5CF6\"/>\n</linearGradient>\n</defs>\n</svg>\n"
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "svg_bytes_unsafe_alone_none",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/svg+xml": {
+              "fixture": "fixtures/malicious_svg/billion_laughs.svg"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "none"
+    },
+    "source": "manual",
+    "rule": "B-8.10.4"
+  },
+  {
+    "name": "svg_bytes_unsafe_falls_to_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/svg+xml": {
+              "fixture": "fixtures/malicious_svg/billion_laughs.svg"
+            },
+            "text/plain": {
+              "utf8": "fallback"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "fallback",
+      "hash": "t:ca8929fa6fe0f95c",
+      "text": "fallback"
+    },
+    "source": "manual",
+    "rule": "B-8.10.4"
+  },
+  {
+    "name": "svg_bytes_invalid_utf8_falls_to_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/svg+xml": {
+              "b64": "PHN2Z4CB"
+            },
+            "text/plain": {
+              "utf8": "x"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "x",
+      "hash": "t:e76563248618b95d",
+      "text": "x"
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "svg_bytes_script_falls_to_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/svg+xml": {
+              "utf8": "<svg><script>alert(1)</script></svg>"
+            },
+            "text/plain": {
+              "utf8": "t"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "t",
+      "hash": "t:319327401d43e7a7",
+      "text": "t"
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "pdf_alone",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "application/pdf": {
+              "utf8": "%PDF-1.4\n%%EOF\n"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "pdf",
+      "preview": "PDF · 0KB",
+      "hash": "p:15:14bcd090baf31edb"
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "pdf_skipped_when_text_present",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "report"
+            },
+            "application/pdf": {
+              "utf8": "%PDF-1.4\n%%EOF\n"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "report",
+      "hash": "t:c71fa86d52a58116",
+      "text": "report"
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "pdf_probe_runs_with_empty_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": ""
+            },
+            "application/pdf": {
+              "utf8": "%PDF-1.4\n%%EOF\n"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "pdf",
+      "preview": "PDF · 0KB",
+      "hash": "p:15:14bcd090baf31edb"
+    },
+    "deviation": "E34",
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "pdf_probe_runs_with_whitespace_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": " \n\t"
+            },
+            "application/pdf": {
+              "utf8": "%PDF-1.4\n%%EOF\n"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "pdf",
+      "preview": "PDF · 0KB",
+      "hash": "p:15:14bcd090baf31edb"
+    },
+    "deviation": "E34",
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "pdf_at_25mib_cap_accepted",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "application/pdf": {
+              "concat": [
+                {
+                  "utf8": "%PDF-1.4\n"
+                },
+                {
+                  "gen": {
+                    "size": 26214391,
+                    "seed": 3
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "pdf",
+      "preview": "PDF · 25.0MB"
+    },
+    "source": "manual",
+    "rule": "B-8.6.3"
+  },
+  {
+    "name": "pdf_over_cap_dropped",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "application/pdf": {
+              "concat": [
+                {
+                  "utf8": "%PDF-1.4\n"
+                },
+                {
+                  "gen": {
+                    "size": 26214392,
+                    "seed": 3
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "drop"
+    },
+    "source": "manual",
+    "rule": "B-8.6.3"
+  },
+  {
+    "name": "pdf_over_cap_chain_continues_to_html",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "application/pdf": {
+              "concat": [
+                {
+                  "utf8": "%PDF-1.4\n"
+                },
+                {
+                  "gen": {
+                    "size": 26214392,
+                    "seed": 3
+                  }
+                }
+              ]
+            },
+            "text/html": {
+              "utf8": "<p>Merhaba <b>dünya</b></p>"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "richText",
+      "preview": "Merhaba dünya",
+      "hash": "r:36f94b65a51fceb7",
+      "text": "Merhaba dünya",
+      "hasRtf": false
+    },
+    "source": "manual",
+    "rule": "B-8.3.2"
+  },
+  {
+    "name": "size_format_pdf_500b",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "application/pdf": {
+              "concat": [
+                {
+                  "utf8": "%PDF-1.4\n"
+                },
+                {
+                  "gen": {
+                    "size": 491,
+                    "seed": 4
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "pdf",
+      "preview": "PDF · 0KB",
+      "hash": "p:500:c7f3459df1f6a46e"
+    },
+    "source": "manual",
+    "rule": "B-6.4.4"
+  },
+  {
+    "name": "size_format_pdf_1mib_minus_1",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "application/pdf": {
+              "concat": [
+                {
+                  "utf8": "%PDF-1.4\n"
+                },
+                {
+                  "gen": {
+                    "size": 1048566,
+                    "seed": 4
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "pdf",
+      "preview": "PDF · 1023KB",
+      "hash": "p:1048575:1f742a48ca331308"
+    },
+    "source": "manual",
+    "rule": "B-6.4.4"
+  },
+  {
+    "name": "size_format_pdf_1mib",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "application/pdf": {
+              "concat": [
+                {
+                  "utf8": "%PDF-1.4\n"
+                },
+                {
+                  "gen": {
+                    "size": 1048567,
+                    "seed": 4
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "pdf",
+      "preview": "PDF · 1.0MB",
+      "hash": "p:1048576:57b34551a22ae475"
+    },
+    "source": "manual",
+    "rule": "B-6.4.4"
+  },
+  {
+    "name": "size_format_pdf_1_1mib",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "application/pdf": {
+              "concat": [
+                {
+                  "utf8": "%PDF-1.4\n"
+                },
+                {
+                  "gen": {
+                    "size": 1153424,
+                    "seed": 4
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "pdf",
+      "preview": "PDF · 1.1MB"
+    },
+    "source": "manual",
+    "rule": "B-6.4.4"
+  },
+  {
+    "name": "size_format_pdf_1_25mib_tie_rounds_up",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "application/pdf": {
+              "concat": [
+                {
+                  "utf8": "%PDF-1.4\n"
+                },
+                {
+                  "gen": {
+                    "size": 1310711,
+                    "seed": 4
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "pdf",
+      "preview": "PDF · 1.3MB"
+    },
+    "source": "manual",
+    "rule": "B-6.4.4"
+  },
+  {
+    "name": "size_format_pdf_3_25mib_tie_rounds_up",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "application/pdf": {
+              "concat": [
+                {
+                  "utf8": "%PDF-1.4\n"
+                },
+                {
+                  "gen": {
+                    "size": 3407863,
+                    "seed": 4
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "pdf",
+      "preview": "PDF · 3.3MB"
+    },
+    "source": "manual",
+    "rule": "B-6.4.4"
+  },
+  {
+    "name": "text_at_cap_accepted",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "repeat": "a",
+              "count": 2097152
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…",
+      "hash": "t:3ff13390fe2c9a95"
+    },
+    "source": "manual",
+    "rule": "B-8.3.3"
+  },
+  {
+    "name": "text_over_cap_dropped",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "repeat": "a",
+              "count": 2097153
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "drop"
+    },
+    "source": "manual",
+    "rule": "B-8.3.3"
+  },
+  {
+    "name": "url_plain",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "https://example.com/a?b=1"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "url",
+      "preview": "https://example.com/a?b=1",
+      "hash": "u:59b734fc99b6f1aa",
+      "text": "https://example.com/a?b=1",
+      "uri": "https://example.com/a?b=1",
+      "display": "https://example.com/a?b=1"
+    },
+    "source": "manual",
+    "rule": "B-8.3.4"
+  },
+  {
+    "name": "url_trimmed_original",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "  https://example.com\n"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "url",
+      "preview": "https://example.com",
+      "hash": "u:6223864c2d3a5b4f",
+      "text": "https://example.com",
+      "uri": "https://example.com",
+      "display": "https://example.com"
+    },
+    "source": "manual",
+    "rule": "B-8.9.2"
+  },
+  {
+    "name": "url_uppercase_keeps_original",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "HTTPS://Example.COM/Path"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "url",
+      "preview": "HTTPS://Example.COM/Path",
+      "hash": "u:0ba68acf60782646",
+      "text": "HTTPS://Example.COM/Path",
+      "uri": "HTTPS://Example.COM/Path",
+      "display": "HTTPS://Example.COM/Path"
+    },
+    "deviation": "E21",
+    "source": "manual",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "url_beats_html_wrapper",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "https://example.com"
+            },
+            "text/html": {
+              "utf8": "<a href=\"https://example.com\">https://example.com</a>"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "url",
+      "preview": "https://example.com",
+      "hash": "u:6223864c2d3a5b4f",
+      "text": "https://example.com",
+      "uri": "https://example.com",
+      "display": "https://example.com"
+    },
+    "source": "manual",
+    "rule": "B-8.3.4"
+  },
+  {
+    "name": "color_hex_upper_keeps_original",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "#FF0000"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "color",
+      "preview": "#ff0000",
+      "hash": "c:327530fd52591d0c",
+      "text": "#FF0000"
+    },
+    "deviation": "E21",
+    "source": "manual",
+    "rule": "B-8.2.5"
+  },
+  {
+    "name": "color_rgb_beats_html",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "rgb(1, 2, 3)"
+            },
+            "text/html": {
+              "utf8": "<span>rgb(1, 2, 3)</span>"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "color",
+      "preview": "rgb(1, 2, 3)",
+      "hash": "c:2cbbe464a1dafa48",
+      "text": "rgb(1, 2, 3)"
+    },
+    "source": "manual",
+    "rule": "B-8.3.4"
+  },
+  {
+    "name": "bare_hex_is_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "ff0000"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "ff0000",
+      "hash": "t:c187608869c00983",
+      "text": "ff0000"
+    },
+    "deviation": "E22",
+    "source": "manual",
+    "rule": "B-8.2.2"
+  },
+  {
+    "name": "email_becomes_url_with_mailto",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": " ayse@ornek.com "
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "url",
+      "preview": "ayse@ornek.com",
+      "hash": "u:81ea3d64369a2e46",
+      "text": "ayse@ornek.com",
+      "uri": "mailto:ayse@ornek.com",
+      "display": "ayse@ornek.com"
+    },
+    "deviation": "E21",
+    "source": "manual",
+    "rule": "B-8.2.6"
+  },
+  {
+    "name": "phone_becomes_url_with_tel",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "+90 532 123 45 67"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "url",
+      "preview": "+90 532 123 45 67",
+      "hash": "u:449ad1613e0602c5",
+      "text": "+90 532 123 45 67",
+      "uri": "tel:+905321234567",
+      "display": "+90 532 123 45 67"
+    },
+    "deviation": "E21",
+    "source": "manual",
+    "rule": "B-8.2.7"
+  },
+  {
+    "name": "svg_markup_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"4\"/></svg>"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "svg",
+      "preview": "SVG · 61B",
+      "hash": "s:a584df8d236cc0ee",
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"4\"/></svg>"
+    },
+    "source": "manual",
+    "rule": "B-8.3.4"
+  },
+  {
+    "name": "svg_markup_unsafe_is_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "fixture": "fixtures/malicious_svg/billion_laughs.svg"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "<?xml version=\"1.0\"?> <!DOCTYPE svg [ <!ENTITY lol \"lol\"> <!ENTITY lol2 \"&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&l…",
+      "hash": "t:70526ef9b8f878e7",
+      "text": "<?xml version=\"1.0\"?>\n<!DOCTYPE svg [\n  <!ENTITY lol \"lol\">\n  <!ENTITY lol2 \"&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;\">\n  <!ENTITY lol3 \"&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;\">\n  <!ENTITY lol4 \"&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;\">\n  <!ENTITY lol5 \"&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;\">\n]>\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\">\n  <text>&lol5;</text>\n</svg>\n"
+    },
+    "source": "manual",
+    "rule": "B-8.10.4"
+  },
+  {
+    "name": "svg_markup_external_href_is_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "<svg><a href=\"https://evil.example/\">x</a></svg>"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "<svg><a href=\"https://evil.example/\">x</a></svg>",
+      "hash": "t:49aab4997355e64b",
+      "text": "<svg><a href=\"https://evil.example/\">x</a></svg>"
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "rich_text_plain_and_html",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "Merhaba dünya"
+            },
+            "text/html": {
+              "utf8": "<p>Merhaba <b>dünya</b></p>"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "richText",
+      "preview": "Merhaba dünya",
+      "hash": "r:36f94b65a51fceb7",
+      "text": "Merhaba dünya",
+      "hasRtf": false
+    },
+    "source": "manual",
+    "rule": "B-8.3.4"
+  },
+  {
+    "name": "rich_text_html_equal_to_text_is_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "same"
+            },
+            "text/html": {
+              "utf8": "same"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "same",
+      "hash": "t:fbe08320413a3cd3",
+      "text": "same"
+    },
+    "source": "manual",
+    "rule": "B-8.3.4"
+  },
+  {
+    "name": "rich_text_html_over_cap_is_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "short"
+            },
+            "text/html": {
+              "repeat": "h",
+              "count": 2097153
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "short",
+      "hash": "t:b6c2136c3b1767af",
+      "text": "short"
+    },
+    "source": "manual",
+    "rule": "B-8.6.1"
+  },
+  {
+    "name": "rich_text_html_at_cap_kept",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "short"
+            },
+            "text/html": {
+              "repeat": "h",
+              "count": 2097152
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "richText",
+      "preview": "short",
+      "hash": "r:ee441e2a2a667b1a",
+      "text": "short",
+      "hasRtf": false
+    },
+    "source": "manual",
+    "rule": "B-8.6.1"
+  },
+  {
+    "name": "rich_text_rtf_at_cap_kept",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "rtf"
+            },
+            "text/html": {
+              "utf8": "<i>rtf</i>"
+            },
+            "text/rtf": {
+              "repeat": "r",
+              "count": 2097152
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "richText",
+      "preview": "rtf",
+      "hash": "r:c1d0fe121124565b",
+      "text": "rtf",
+      "hasRtf": true
+    },
+    "source": "manual",
+    "rule": "B-8.6.1"
+  },
+  {
+    "name": "rich_text_rtf_over_cap_dropped_companion",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "rtf"
+            },
+            "text/html": {
+              "utf8": "<i>rtf</i>"
+            },
+            "text/rtf": {
+              "repeat": "r",
+              "count": 2097153
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "richText",
+      "preview": "rtf",
+      "hash": "r:c1d0fe121124565b",
+      "text": "rtf",
+      "hasRtf": false
+    },
+    "source": "manual",
+    "rule": "B-8.6.1"
+  },
+  {
+    "name": "whitespace_only_text_is_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "  \t "
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "",
+      "hash": "t:930961ce23f52a1b",
+      "text": "  \t "
+    },
+    "source": "manual",
+    "rule": "B-8.3.4"
+  },
+  {
+    "name": "empty_text_alone_none",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": ""
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "none"
+    },
+    "source": "manual",
+    "rule": "B-8.3.4"
+  },
+  {
+    "name": "empty_item_none",
+    "input": {
+      "items": [
+        {
+          "formats": {}
+        }
+      ]
+    },
+    "expect": {
+      "result": "none"
+    },
+    "source": "manual",
+    "rule": "B-8.3.4"
+  },
+  {
+    "name": "image_single_over_cap_dropped",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 26214327,
+                    "seed": 8
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "drop"
+    },
+    "deviation": "S8.6",
+    "source": "manual",
+    "rule": "B-8.3.10"
+  },
+  {
+    "name": "image_single_at_cap_accepted",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 26214326,
+                    "seed": 8
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "PNG · 25.0MB",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.10"
+  },
+  {
+    "name": "multi_images_oversized_excluded_rest_image_set",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 26214327,
+                    "seed": 13
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "formats": {
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        },
+        {
+          "formats": {
+            "image/jpeg": {
+              "fixture": "fixtures/tiny.jpg"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "imageSet",
+      "preview": "2 resim · 0KB",
+      "hash": "is:2:49cc75348340ebfa",
+      "imageCount": 2
+    },
+    "deviation": "S8.6",
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "svg_bytes_over_cap_dropped",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/svg+xml": {
+              "concat": [
+                {
+                  "utf8": "<svg>"
+                },
+                {
+                  "repeat": " ",
+                  "count": 20971510
+                },
+                {
+                  "utf8": "</svg>"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "drop"
+    },
+    "deviation": "S8.6",
+    "source": "manual",
+    "rule": "B-8.3.10"
+  },
+  {
+    "name": "svg_bytes_over_cap_falls_to_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/svg+xml": {
+              "concat": [
+                {
+                  "utf8": "<svg>"
+                },
+                {
+                  "repeat": " ",
+                  "count": 20971510
+                },
+                {
+                  "utf8": "</svg>"
+                }
+              ]
+            },
+            "text/plain": {
+              "utf8": "s"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "s",
+      "hash": "t:e92f45a0422baa60",
+      "text": "s"
+    },
+    "source": "manual",
+    "rule": "B-8.3.10"
+  },
+  {
+    "name": "multi_images_none_fit_dropped",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 26214327,
+                    "seed": 1
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 26214328,
+                    "seed": 2
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "drop"
+    },
+    "deviation": "S8.6",
+    "source": "manual",
+    "rule": "B-8.3.10"
+  },
+  {
+    "name": "multi_mixed_oversized_image_falls_back_to_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 26214327,
+                    "seed": 10
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "caption"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "caption",
+      "hash": "t:737eeaea215df2a5",
+      "text": "caption"
+    },
+    "deviation": "S8.6",
+    "source": "manual",
+    "rule": "B-8.3.10"
+  },
+  {
+    "name": "multi_mixed_oversized_image_falls_back_to_rich_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 26214327,
+                    "seed": 11
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "Merhaba dünya"
+            },
+            "text/html": {
+              "utf8": "<p>Merhaba <b>dünya</b></p>"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "richText",
+      "preview": "Merhaba dünya",
+      "hash": "r:36f94b65a51fceb7",
+      "text": "Merhaba dünya",
+      "hasRtf": false
+    },
+    "deviation": "S8.6",
+    "source": "manual",
+    "rule": "B-8.3.10"
+  },
+  {
+    "name": "multi_mixed_all_over_caps_dropped",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 26214327,
+                    "seed": 12
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "formats": {
+            "text/plain": {
+              "repeat": "t",
+              "count": 2097153
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "drop"
+    },
+    "deviation": "S8.6",
+    "source": "manual",
+    "rule": "B-8.3.10"
+  },
+  {
+    "name": "html_only_over_text_cap_dropped",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/html": {
+              "repeat": "h",
+              "count": 2097153
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "drop"
+    },
+    "deviation": "S8.6",
+    "source": "manual",
+    "rule": "B-8.3.10"
+  },
+  {
+    "name": "html_only_at_text_cap_rich_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/html": {
+              "repeat": "h",
+              "count": 2097152
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "richText",
+      "preview": "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh…",
+      "hash": "r:231c0a4cc6ea89d3",
+      "hasRtf": false
+    },
+    "source": "manual",
+    "rule": "B-8.3.10"
+  },
+  {
+    "name": "html_only_stripped_rich_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/html": {
+              "utf8": "<p>Merhaba <b>dünya</b></p>"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "richText",
+      "preview": "Merhaba dünya",
+      "hash": "r:36f94b65a51fceb7",
+      "text": "Merhaba dünya",
+      "hasRtf": false
+    },
+    "source": "manual",
+    "rule": "B-8.3.5"
+  },
+  {
+    "name": "html_only_whitespace_collapsed",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/html": {
+              "utf8": "<p>a</p>\n\n<p>  b </p>"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "richText",
+      "preview": "a b",
+      "hash": "r:4a872497245dae5b",
+      "text": "a b",
+      "hasRtf": false
+    },
+    "source": "manual",
+    "rule": "B-8.3.5"
+  },
+  {
+    "name": "html_only_tags_only_none",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/html": {
+              "utf8": "<br><img src=\"x\">"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "none"
+    },
+    "source": "manual",
+    "rule": "B-8.3.5"
+  },
+  {
+    "name": "preview_120_code_points_no_ellipsis",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "hash": "t:4bfaaa8c3357d4c3",
+      "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "source": "manual",
+    "rule": "B-6.4.5"
+  },
+  {
+    "name": "preview_121_code_points_cut",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…",
+      "hash": "t:fa49ee3be3299b03",
+      "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "source": "manual",
+    "rule": "B-6.4.5"
+  },
+  {
+    "name": "preview_emoji_cut_at_120_code_points",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀…",
+      "hash": "t:0cc03e780da13818",
+      "text": "a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀a😀"
+    },
+    "deviation": "E24",
+    "source": "manual",
+    "rule": "B-6.4.5"
+  },
+  {
+    "name": "preview_ecmascript_whitespace_collapsed",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "  satır1\n\n\tsatır2  son　﻿bitti  "
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "satır1 satır2 son bitti",
+      "hash": "t:afb4e8b8bbc6cce3",
+      "text": "  satır1\n\n\tsatır2  son　﻿bitti  "
+    },
+    "source": "manual",
+    "rule": "B-6.4.5"
+  },
+  {
+    "name": "preview_nel_trimmed_not_collapsed",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "ortakalir​zw"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "ortakalir​zw",
+      "hash": "t:95b674349ab3beab",
+      "text": "ortakalir​zw"
+    },
+    "source": "manual",
+    "rule": "B-6.4.5"
+  },
+  {
+    "name": "multi_two_png_image_set",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        },
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 10,
+                    "seed": 1
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "imageSet",
+      "preview": "2 resim · 0KB",
+      "hash": "is:2:2be3ad1c52d4be7e",
+      "imageCount": 2
+    },
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "multi_png_jpeg_gif_image_set",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        },
+        {
+          "formats": {
+            "image/jpeg": {
+              "fixture": "fixtures/tiny.jpg"
+            }
+          }
+        },
+        {
+          "formats": {
+            "image/gif": {
+              "fixture": "fixtures/tiny.gif"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "imageSet",
+      "preview": "3 resim · 0KB",
+      "hash": "is:3:b79f8ad3d46f7a74",
+      "imageCount": 3
+    },
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "multi_images_total_at_25mib_cap_image_set",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 13107126,
+                    "seed": 1
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 13107126,
+                    "seed": 2
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "imageSet",
+      "preview": "2 resim · 25.0MB",
+      "imageCount": 2
+    },
+    "deviation": "E25",
+    "source": "manual",
+    "rule": "B-8.6.4"
+  },
+  {
+    "name": "multi_images_over_cap_first_fitting_image",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 20971446,
+                    "seed": 1
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 5242807,
+                    "seed": 2
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "PNG · 20.0MB",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "multi_images_over_cap_skips_oversized_first",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 26214327,
+                    "seed": 1
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "formats": {
+            "image/jpeg": {
+              "fixture": "fixtures/tiny.jpg"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "JPEG · 0KB",
+      "hash": "i:804:7e5d7a0559adee7f",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "multi_mixed_image_beats_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "caption"
+            }
+          }
+        },
+        {
+          "formats": {
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "PNG · 0KB",
+      "hash": "i:74:300491311ae033d8",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "multi_mixed_svg_beats_pdf",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "application/pdf": {
+              "utf8": "%PDF-1.4\n%%EOF\n"
+            }
+          }
+        },
+        {
+          "formats": {
+            "image/svg+xml": {
+              "fixture": "fixtures/malicious_svg/simple_icon.svg"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "svg",
+      "preview": "SVG · 252B",
+      "hash": "s:0f4264fe28992f25",
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\">\n  <circle cx=\"12\" cy=\"12\" r=\"10\" fill=\"#4a90e2\"/>\n  <path d=\"M8 12l3 3 5-6\" stroke=\"white\" stroke-width=\"2\" fill=\"none\"/>\n</svg>\n"
+    },
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "multi_mixed_pdf_beats_rich_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/html": {
+              "utf8": "<p>Merhaba <b>dünya</b></p>"
+            }
+          }
+        },
+        {
+          "formats": {
+            "application/pdf": {
+              "utf8": "%PDF-1.4\n%%EOF\n"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "pdf",
+      "preview": "PDF · 0KB",
+      "hash": "p:15:14bcd090baf31edb"
+    },
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "multi_mixed_rich_text_beats_url",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "https://example.com"
+            }
+          }
+        },
+        {
+          "formats": {
+            "text/html": {
+              "utf8": "<p>Merhaba <b>dünya</b></p>"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "richText",
+      "preview": "Merhaba dünya",
+      "hash": "r:36f94b65a51fceb7",
+      "text": "Merhaba dünya",
+      "hasRtf": false
+    },
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "multi_mixed_url_beats_color",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "#abc"
+            }
+          }
+        },
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "https://example.com"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "url",
+      "preview": "https://example.com",
+      "hash": "u:6223864c2d3a5b4f",
+      "text": "https://example.com",
+      "uri": "https://example.com",
+      "display": "https://example.com"
+    },
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "multi_mixed_color_beats_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "hello"
+            }
+          }
+        },
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "#abc"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "color",
+      "preview": "#abc",
+      "hash": "c:b5fb48a4eaa72ab8",
+      "text": "#abc"
+    },
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "multi_tie_first_wins",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "first"
+            }
+          }
+        },
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "second"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "first",
+      "hash": "t:0ed1dd01600cfc1f",
+      "text": "first"
+    },
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "multi_single_recognized_image_not_set",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": ""
+            }
+          }
+        },
+        {
+          "formats": {
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "PNG · 0KB",
+      "hash": "i:74:300491311ae033d8",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "files_text_file",
+    "input": {
+      "items": [],
+      "files": [
+        "fixtures/fake.txt"
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "files",
+      "preview": "fake.txt"
+    },
+    "source": "manual",
+    "rule": "B-8.3.8"
+  },
+  {
+    "name": "files_single_png_becomes_image",
+    "input": {
+      "items": [],
+      "files": [
+        "fixtures/tiny.png"
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "PNG · 0KB",
+      "hash": "i:74:300491311ae033d8",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.8"
+  },
+  {
+    "name": "files_jpg_gif_become_image_set",
+    "input": {
+      "items": [],
+      "files": [
+        "fixtures/tiny.jpg",
+        "fixtures/tiny.gif"
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "imageSet",
+      "preview": "2 resim · 0KB",
+      "hash": "is:2:7f456de3a23083e6",
+      "imageCount": 2
+    },
+    "source": "manual",
+    "rule": "B-8.3.8"
+  },
+  {
+    "name": "files_mixed_extensions_stay_files",
+    "input": {
+      "items": [],
+      "files": [
+        "fixtures/tiny.png",
+        "fixtures/fake.txt"
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "files",
+      "preview": "2 dosya: tiny.png, fake.txt"
+    },
+    "source": "manual",
+    "rule": "B-8.3.8"
+  },
+  {
+    "name": "files_zero_byte_image_stays_files",
+    "input": {
+      "items": [],
+      "files": [
+        "fixtures/empty.png"
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "files",
+      "preview": "empty.png"
+    },
+    "source": "manual",
+    "rule": "B-8.3.8"
+  },
+  {
+    "name": "files_four_preview_more",
+    "input": {
+      "items": [],
+      "files": [
+        "fixtures/fake.txt",
+        "fixtures/tiny.png",
+        "fixtures/malicious_svg/xinclude.svg",
+        "fixtures/tiny.webp"
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "files",
+      "preview": "4 dosya: fake.txt, tiny.png, xinclude.svg + 1 daha"
+    },
+    "source": "manual",
+    "rule": "B-6.4.6"
+  },
+  {
+    "name": "files_uppercase_extension_image",
+    "input": {
+      "items": [],
+      "files": [
+        {
+          "name": "SHOT.PNG",
+          "bytes": {
+            "fixture": "fixtures/tiny.png"
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "PNG · 0KB",
+      "hash": "i:74:300491311ae033d8",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.8"
+  },
+  {
+    "name": "files_jpeg_extension_image",
+    "input": {
+      "items": [],
+      "files": [
+        {
+          "name": "photo.jpeg",
+          "bytes": {
+            "fixture": "fixtures/tiny.jpg"
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "JPEG · 0KB",
+      "hash": "i:804:7e5d7a0559adee7f",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.8"
+  },
+  {
+    "name": "files_image_at_25mib_cap_image",
+    "input": {
+      "items": [],
+      "files": [
+        {
+          "name": "big.png",
+          "bytes": {
+            "concat": [
+              {
+                "fixture": "fixtures/tiny.png"
+              },
+              {
+                "gen": {
+                  "size": 26214326,
+                  "seed": 5
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "PNG · 25.0MB",
+      "imageCount": 1
+    },
+    "deviation": "E25",
+    "source": "manual",
+    "rule": "B-8.6.5"
+  },
+  {
+    "name": "files_image_over_25mib_cap_files",
+    "input": {
+      "items": [],
+      "files": [
+        {
+          "name": "big.png",
+          "bytes": {
+            "concat": [
+              {
+                "fixture": "fixtures/tiny.png"
+              },
+              {
+                "gen": {
+                  "size": 26214327,
+                  "seed": 5
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "files",
+      "preview": "big.png"
+    },
+    "source": "manual",
+    "rule": "B-8.6.5"
+  },
+  {
+    "name": "files_total_at_25mib_cap_image_set",
+    "input": {
+      "items": [],
+      "files": [
+        {
+          "name": "a.png",
+          "bytes": {
+            "concat": [
+              {
+                "fixture": "fixtures/tiny.png"
+              },
+              {
+                "gen": {
+                  "size": 13107126,
+                  "seed": 6
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "b.png",
+          "bytes": {
+            "concat": [
+              {
+                "fixture": "fixtures/tiny.png"
+              },
+              {
+                "gen": {
+                  "size": 13107126,
+                  "seed": 7
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "imageSet",
+      "preview": "2 resim · 25.0MB",
+      "imageCount": 2
+    },
+    "deviation": "E25",
+    "source": "manual",
+    "rule": "B-8.6.5"
+  },
+  {
+    "name": "files_total_over_25mib_cap_files",
+    "input": {
+      "items": [],
+      "files": [
+        {
+          "name": "a.png",
+          "bytes": {
+            "concat": [
+              {
+                "fixture": "fixtures/tiny.png"
+              },
+              {
+                "gen": {
+                  "size": 13107126,
+                  "seed": 6
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "b.png",
+          "bytes": {
+            "concat": [
+              {
+                "fixture": "fixtures/tiny.png"
+              },
+              {
+                "gen": {
+                  "size": 13107127,
+                  "seed": 7
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "files",
+      "preview": "2 dosya: a.png, b.png"
+    },
+    "source": "manual",
+    "rule": "B-8.6.5"
+  },
+  {
+    "name": "files_beat_item_representations",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "fake.txt"
+            },
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        }
+      ],
+      "files": [
+        "fixtures/fake.txt"
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "files",
+      "preview": "fake.txt"
+    },
+    "source": "manual",
+    "rule": "B-8.3.8"
+  },
+  {
+    "name": "flag_concealed_classifies_normally",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "hunter2"
+            }
+          }
+        }
+      ],
+      "flags": [
+        "concealed"
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "hunter2",
+      "hash": "t:4a78fb9c17e0a183",
+      "text": "hunter2"
+    },
+    "source": "manual",
+    "rule": "B-8.8.7"
+  },
+  {
+    "name": "flag_transient_classifies_normally",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        }
+      ],
+      "flags": [
+        "transient"
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "PNG · 0KB",
+      "hash": "i:74:300491311ae033d8",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.8.7"
+  }
+]

@@ -1,0 +1,473 @@
+[
+  {
+    "name": "t_ascii",
+    "input": {
+      "prefix": "t",
+      "text": "hello"
+    },
+    "expect": "t:1bec6ebade142b8e",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "t_empty",
+    "input": {
+      "prefix": "t",
+      "text": ""
+    },
+    "expect": "t:a63a022d41347770",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "t_turkish_emoji",
+    "input": {
+      "prefix": "t",
+      "text": "Gözlük 🎉"
+    },
+    "expect": "t:01040865cda74a4d",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "t_untrimmed_kept",
+    "input": {
+      "prefix": "t",
+      "text": "  padded  \n"
+    },
+    "expect": "t:bb66302c3fb78c24",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "t_embedded_nul",
+    "input": {
+      "prefix": "t",
+      "text": "a\u0000b"
+    },
+    "expect": "t:0e763280ae34932b",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "u_https",
+    "input": {
+      "prefix": "u",
+      "text": "https://example.com"
+    },
+    "expect": "u:6223864c2d3a5b4f",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "u_mailto",
+    "input": {
+      "prefix": "u",
+      "text": "mailto:a@b.com"
+    },
+    "expect": "u:f4cf1c42045b28da",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "u_tel",
+    "input": {
+      "prefix": "u",
+      "text": "tel:+905321234567"
+    },
+    "expect": "u:3230e76fb6d06e8f",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "u_uppercase_original_text",
+    "input": {
+      "prefix": "u",
+      "text": "HTTPS://Example.COM/Path"
+    },
+    "expect": "u:0ba68acf60782646",
+    "deviation": "E21",
+    "source": "manual",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "u_bare_email_original_text",
+    "input": {
+      "prefix": "u",
+      "text": "ayse@ornek.com"
+    },
+    "expect": "u:81ea3d64369a2e46",
+    "deviation": "E21",
+    "source": "manual",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "u_bare_phone_original_text",
+    "input": {
+      "prefix": "u",
+      "text": "+90 532 123 45 67"
+    },
+    "expect": "u:449ad1613e0602c5",
+    "deviation": "E21",
+    "source": "manual",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "s_simple_icon_fixture",
+    "input": {
+      "prefix": "s",
+      "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\">\n  <circle cx=\"12\" cy=\"12\" r=\"10\" fill=\"#4a90e2\"/>\n  <path d=\"M8 12l3 3 5-6\" stroke=\"white\" stroke-width=\"2\" fill=\"none\"/>\n</svg>\n"
+    },
+    "expect": "s:0f4264fe28992f25",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "s_inline_markup",
+    "input": {
+      "prefix": "s",
+      "text": "<svg></svg>"
+    },
+    "expect": "s:ff4b56579ff8fec0",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "c_hex",
+    "input": {
+      "prefix": "c",
+      "text": "#ff0000"
+    },
+    "expect": "c:327530fd52591d0c",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "c_rgb_normalized",
+    "input": {
+      "prefix": "c",
+      "text": "rgb(255, 0, 0)"
+    },
+    "expect": "c:f6dabe021e2ad68a",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "c_hsla_normalized",
+    "input": {
+      "prefix": "c",
+      "text": "hsla(240, 100%, 50%, 0.5)"
+    },
+    "expect": "c:9f4525698e8da632",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "r_plain_nul_html",
+    "input": {
+      "prefix": "r",
+      "text": "hi\u0000<b>hi</b>"
+    },
+    "expect": "r:e036281eeac82765",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "r_turkish",
+    "input": {
+      "prefix": "r",
+      "text": "Şubat raporu\u0000<p>Şubat <b>raporu</b></p>"
+    },
+    "expect": "r:f5ce27b483478133",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "f_single",
+    "input": {
+      "prefix": "f",
+      "uris": [
+        "file:///tmp/sclip/a.png"
+      ]
+    },
+    "expect": "f:3ef53e20959826c1",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "f_multi_percent_encoded",
+    "input": {
+      "prefix": "f",
+      "uris": [
+        "file:///tmp/a.png",
+        "file:///tmp/b%20c.pdf"
+      ]
+    },
+    "expect": "f:4c0d808f7416ca90",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "f_windows_drive",
+    "input": {
+      "prefix": "f",
+      "uris": [
+        "file:///C:/Users/foo/bar.txt"
+      ]
+    },
+    "expect": "f:e30dbc886f8534bf",
+    "source": "oracle",
+    "rule": "B-8.1.5"
+  },
+  {
+    "name": "i_four_bytes",
+    "input": {
+      "prefix": "i",
+      "bytes": {
+        "b64": "AQIDBA=="
+      }
+    },
+    "expect": "i:4:9f64a747e1b97f13",
+    "source": "oracle",
+    "rule": "B-8.1.6"
+  },
+  {
+    "name": "i_empty",
+    "input": {
+      "prefix": "i",
+      "bytes": {
+        "b64": ""
+      }
+    },
+    "expect": "i:0:e3b0c44298fc1c14",
+    "source": "oracle",
+    "rule": "B-8.1.6"
+  },
+  {
+    "name": "i_png_fixture",
+    "input": {
+      "prefix": "i",
+      "bytes": {
+        "fixture": "fixtures/tiny.png"
+      }
+    },
+    "expect": "i:74:300491311ae033d8",
+    "source": "oracle",
+    "rule": "B-8.1.6"
+  },
+  {
+    "name": "i_exactly_1mib",
+    "input": {
+      "prefix": "i",
+      "bytes": {
+        "gen": {
+          "size": 1048576,
+          "seed": 1
+        }
+      }
+    },
+    "expect": "i:1048576:c744d09c9210a7a6",
+    "source": "oracle",
+    "rule": "B-8.1.6"
+  },
+  {
+    "name": "i_1mib_plus_one_full_sha",
+    "input": {
+      "prefix": "i",
+      "bytes": {
+        "gen": {
+          "size": 1048577,
+          "seed": 1
+        }
+      }
+    },
+    "expect": "i:1048577:ceeee15134d28903",
+    "deviation": "E35",
+    "source": "manual",
+    "rule": "B-8.1.6"
+  },
+  {
+    "name": "i_2mib_full_sha",
+    "input": {
+      "prefix": "i",
+      "bytes": {
+        "gen": {
+          "size": 2097152,
+          "seed": 5
+        }
+      }
+    },
+    "expect": "i:2097152:b8251fce47bf097b",
+    "deviation": "E35",
+    "source": "manual",
+    "rule": "B-8.1.6"
+  },
+  {
+    "name": "p_small",
+    "input": {
+      "prefix": "p",
+      "bytes": {
+        "b64": "JVBERi0xLjQKJSVFT0YK"
+      }
+    },
+    "expect": "p:15:14bcd090baf31edb",
+    "source": "oracle",
+    "rule": "B-8.1.6"
+  },
+  {
+    "name": "p_edges_equal_middle_a",
+    "input": {
+      "prefix": "p",
+      "bytes": {
+        "concat": [
+          {
+            "gen": {
+              "size": 65536,
+              "seed": 1
+            }
+          },
+          {
+            "gen": {
+              "size": 1966080,
+              "seed": 2
+            }
+          },
+          {
+            "gen": {
+              "size": 65536,
+              "seed": 3
+            }
+          }
+        ]
+      }
+    },
+    "expect": "p:2097152:d308f8a11ee80a50",
+    "deviation": "E35",
+    "source": "manual",
+    "rule": "B-8.1.6"
+  },
+  {
+    "name": "p_edges_equal_middle_b",
+    "input": {
+      "prefix": "p",
+      "bytes": {
+        "concat": [
+          {
+            "gen": {
+              "size": 65536,
+              "seed": 1
+            }
+          },
+          {
+            "gen": {
+              "size": 1966080,
+              "seed": 4
+            }
+          },
+          {
+            "gen": {
+              "size": 65536,
+              "seed": 3
+            }
+          }
+        ]
+      }
+    },
+    "expect": "p:2097152:b87ae993a0acdd88",
+    "deviation": "E35",
+    "source": "manual",
+    "rule": "B-8.1.6"
+  },
+  {
+    "name": "is_two_small",
+    "input": {
+      "prefix": "is",
+      "items": [
+        {
+          "b64": "AQIDBA=="
+        },
+        {
+          "b64": "BQYHCA=="
+        }
+      ]
+    },
+    "expect": "is:2:8843b624558880ab",
+    "source": "oracle",
+    "rule": "B-8.1.7"
+  },
+  {
+    "name": "is_two_small_swapped",
+    "input": {
+      "prefix": "is",
+      "items": [
+        {
+          "b64": "BQYHCA=="
+        },
+        {
+          "b64": "AQIDBA=="
+        }
+      ]
+    },
+    "expect": "is:2:497080249ef16eca",
+    "source": "oracle",
+    "rule": "B-8.1.7"
+  },
+  {
+    "name": "is_same_bytes_twice",
+    "input": {
+      "prefix": "is",
+      "items": [
+        {
+          "b64": "AQIDBA=="
+        },
+        {
+          "b64": "AQIDBA=="
+        }
+      ]
+    },
+    "expect": "is:2:04c89c7c2dcb6aa7",
+    "source": "oracle",
+    "rule": "B-8.1.7"
+  },
+  {
+    "name": "is_three_fixtures",
+    "input": {
+      "prefix": "is",
+      "items": [
+        {
+          "fixture": "fixtures/tiny.png"
+        },
+        {
+          "fixture": "fixtures/tiny.jpg"
+        },
+        {
+          "fixture": "fixtures/tiny.gif"
+        }
+      ]
+    },
+    "expect": "is:3:b79f8ad3d46f7a74",
+    "source": "oracle",
+    "rule": "B-8.1.7"
+  },
+  {
+    "name": "is_large_item_full_sha",
+    "input": {
+      "prefix": "is",
+      "items": [
+        {
+          "gen": {
+            "size": 1048583,
+            "seed": 2
+          }
+        },
+        {
+          "b64": "CQ=="
+        }
+      ]
+    },
+    "expect": "is:2:6157c4ab5d79814c",
+    "deviation": "E35",
+    "source": "manual",
+    "rule": "B-8.1.7"
+  }
+]
