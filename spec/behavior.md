@@ -35,6 +35,7 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 | Toplam ağır bütçe | 150 MiB | B-8.6.6 |
 | Metin ağırlık eşiği | 65 536 karakter (altı 0 sayılır) | B-8.6.7 |
 | Geçmiş boyutu | 10 / 30 / 50 / 100, varsayılan 30 | B-6.6.4, B-8.6.9 |
+| `alwaysPastePlainText` varsayılanı | false (yalnız richText'i etkiler) | B-6.6.16, B-8.9.1 |
 | Hash öneki uzunluğu | SHA-256'nın ilk 16 hex'i | B-8.1.5 |
 | Biçim okuma zaman aşımı | 10 sn | B-8.3.9, B-8.8.6 |
 | `OpenClipboard` yeniden deneme | 5 × ~12 ms (Windows) | B-8.8.2 |
@@ -83,9 +84,9 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 - **B-6.2.7** Satırın herhangi bir parçası odaktayken modifiyersiz Delete / Backspace o öğeyi onaysız siler ve ekran
   okuyucuya `[a11y.announce.deleted]` duyurulur (`{preview}` = öğe önizlemesi).
 - **B-6.2.8** Standart satırda Enter / Numpad Enter / Space yapıştırır.
-- **B-6.2.9** Standart satırda Shift+Enter düz metin yapıştırır; yalnız metni olan tiplerde (text, url, richText,
-  color, svg). svg'de düz metin ham XML'dir. Metni olmayan tiplerde (image, files, pdf) Shift+Enter hiçbir şey
-  yapmaz; Shift+tık ise normal yapıştırmaya düşer (B-6.3.1).
+- **B-6.2.9** Shift yapıştırmada özel anlam taşımaz: Shift+Enter normal Enter gibi yapıştırır (B-6.2.8). Yapıştırma
+  yalnız Enter / Numpad Enter / Space / tık ile yapılır; düz metin yapıştırma tuş birleşimiyle değil ayarla seçilir
+  (B-6.6.16).
 - **B-6.2.10** imageSet ızgarasında Enter / Space odaktaki görseli yapıştırır.
 - **B-6.2.11** imageSet ızgarasında → sonraki küçük resme gider; son resimde "Hepsini yapıştır"a (yoksa Sil'e) atlar ve
   geldiği resmi hatırlar.
@@ -102,8 +103,7 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 
 ## 6.3 Fare
 
-- **B-6.3.1** Satıra tık yapıştırır; Shift+tık metni olan tiplerde düz metin, metni olmayan tiplerde normal
-  yapıştırır (B-6.2.9). imageSet küçük resmine
+- **B-6.3.1** Satıra tık yapıştırır; Shift+tık normal tıkla aynıdır (B-6.2.9). imageSet küçük resmine
   tık o görseli yapıştırır (el imleci).
 - **B-6.3.2** Satır vurguları (vurgu = sistem vurgu rengi): hover → vurgu rengi %8 alfa dolgu; klavye odağı → vurgu
   rengi %18 alfa dolgu + 1,5 pt vurgu rengi kenarlık; ikisinde de köşe yarıçapı 5 pt.
@@ -206,6 +206,9 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
   pasif).
 - **B-6.6.15** 2'den az modifiyerli kombo reddedilir: `[settings.hotkey.error.min_modifiers]`. Kayıt başarısızsa
   önceki kombo geri yüklenir ve `[settings.hotkey.error.in_use]` gösterilir.
+- **B-6.6.16** `alwaysPastePlainText` (bool; false), Geçmiş altında: `[settings.always_paste_plain_text.title]`,
+  alt metin `[settings.always_paste_plain_text.subtitle]`. Anahtar `sclip.settings.alwaysPastePlainText`. Açıkken
+  richText öğeler yalnız düz metin olarak yapıştırılır (`plainOnly`, B-8.9.1); diğer tiplerde etkisi yoktur.
 
 ## 6.7 Menü çubuğu / tepsi
 
@@ -255,7 +258,8 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 - **B-7.1.3** `toggle` @ `shown`: panel odaktaysa ya da sabitliyse → gizle → `hidden`. Panel görünür, odakta değil ve
   sabit değilse (yalnız `autoHideOnBlur` kapalıyken olur) → yeniden yerleştir, öne getir, odakla → `shown` kalır.
 - **B-7.1.4** `toggle` @ `pasting` → yok sayılır.
-- **B-7.1.5** `paste(entry, plainOnly)` @ `shown` → panoya yaz (B-8.9). Yazma başarısızsa `pasting`'e girilmez: panel
+- **B-7.1.5** `paste(entry, imageIndex)` @ `shown` (`imageIndex`: imageSet için tek görselin dizini, yoksa hepsi; diğer
+  tiplerde yok sayılır) → `plainOnly = alwaysPastePlainText && entry.kind == richText` ile panoya yaz (B-8.9). Yazma başarısızsa `pasting`'e girilmez: panel
   gizlenmez, öğe `touch` edilmez, durum `shown` kalır. Yazma başarılıysa öğeyi `touch` et, gizle → `pasting`.
   `paste` @ `hidden` / `pasting` → yok sayılır.
 - **B-7.1.6** `pasting` → fiziksel Enter bırakılana kadar (OS tuş durumu) ve hedef doğrulanana kadar bekle → sentetik
@@ -432,7 +436,9 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 
 ## 8.9 Geri yazma (yapıştırma)
 
-- **B-8.9.1** `plainOnly`: yalnız düz metin (orijinal metin; svg'de ham XML).
+- **B-8.9.1** `plainOnly`: `alwaysPastePlainText` açık ve öğe richText ise yalnız düz metin yazılır (HTML/RTF yazılmaz).
+  Diğer tüm tiplerde `plainOnly` her zaman false'tur (text / url / color zaten düz metin yazar; svg / image / imageSet /
+  files / pdf etkilenmez). svg her zaman görsel olarak yapıştırılır (B-8.9.3).
 - **B-8.9.2** text / url / color: düz metin olarak orijinal kopyalanan metin (E21).
 - **B-8.9.3** svg: tek öğede [temp `clipboard.svg` dosya URL'si] + SVG baytları + düz metin.
 - **B-8.9.4** image: tek biçim. imageSet tek görsel: o görsel. imageSet hepsi: temp `001…` dosyaları native dosya
@@ -485,4 +491,6 @@ Bu kuralların vektörleri `"deviation": "<kimlik>"` ile etiketlenir.
   boşluk yok, ASCII dışı serbest; `http://`, `https:`, `\r`/boşluk içeren metin url değildir (B-8.2.1).
 - **S8.6** — Sınıflandırıcı sınır/düşme anlamı: sınırı aşan öğe aday değildir, sınır içindeki en zengin öğe seçilir;
   hiçbiri sığmazsa `drop` (aşırı büyük görsel, yalnız-HTML, SVG baytları dahil) (B-8.3.7, B-8.3.10).
+- **Shift+Enter / Shift+tık** — Düz metin yapıştırma kısayolu kaldırıldı; yerine `alwaysPastePlainText` ayarı geldi
+  (kullanıcı kararı 2026-10-18; B-6.2.9, B-6.3.1, B-6.6.16). svg için ham XML yapıştırma yolu da yoktur.
 - **Başlık çubuğu** — (macOS) başlık çubuğu temanın üst çubuk rengini izlemez, native görünümü izler (B-6.1.3).

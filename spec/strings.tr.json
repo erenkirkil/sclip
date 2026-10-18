@@ -87,6 +87,8 @@
   "settings.sensitive_filter.subtitle.off": "Uyarı: hassas içerik geçmişe düşebilir.",
   "settings.clear_on_screen_lock.title": "Ekran kilitlendiğinde geçmişi temizle",
   "settings.clear_on_screen_lock.subtitle": "Kilidi açtığında geçmiş boş olur. Panonun kendisi ve geçici dosyalar korunur — Cmd/Ctrl+V çalışmaya devam eder.",
+  "settings.always_paste_plain_text.title": "Her zaman düz metin yapıştır",
+  "settings.always_paste_plain_text.subtitle": "Biçimli metin (Word, web) biçimsiz yapıştırılır.",
 
   "settings.auto_hide_on_blur.title": "Odak kaybında gizle",
   "settings.auto_hide_on_blur.subtitle": "Başka bir uygulamaya tıklayınca sclip otomatik gizlenir.",

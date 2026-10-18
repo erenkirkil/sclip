@@ -87,6 +87,8 @@ public enum StringKey: String, CaseIterable, Sendable {
     case settingsSensitiveFilterSubtitleOff = "settings.sensitive_filter.subtitle.off"
     case settingsClearOnScreenLockTitle = "settings.clear_on_screen_lock.title"
     case settingsClearOnScreenLockSubtitle = "settings.clear_on_screen_lock.subtitle"
+    case settingsAlwaysPastePlainTextTitle = "settings.always_paste_plain_text.title"
+    case settingsAlwaysPastePlainTextSubtitle = "settings.always_paste_plain_text.subtitle"
     case settingsAutoHideOnBlurTitle = "settings.auto_hide_on_blur.title"
     case settingsAutoHideOnBlurSubtitle = "settings.auto_hide_on_blur.subtitle"
     case settingsAlwaysOnTopTitle = "settings.always_on_top.title"
