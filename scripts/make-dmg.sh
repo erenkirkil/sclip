@@ -51,9 +51,14 @@ DIST_DIR="dist"
 STAGE_DIR="$DIST_DIR/.dmg-staging"
 DMG_PATH="$DIST_DIR/${APP_NAME}-${VERSION}.dmg"
 
-echo "==> Cleaning previous build"
-rm -rf "$DIST_DIR"
+echo "==> Cleaning this script's own artefacts only"
+# NEVER `rm -rf "$DIST_DIR"`: dist/ is gitignored (.gitignore:104) and holds
+# previously released, signed + notarized DMGs that exist nowhere else — git
+# cannot restore them. Remove only what this run is about to rebuild.
+# hdiutil already runs with -ov, so this is belt-and-braces, not a requirement.
 mkdir -p "$DIST_DIR"
+rm -rf "$STAGE_DIR"
+rm -f "$DMG_PATH"
 flutter clean >/dev/null
 
 echo "==> Building release (universal, AOT)"

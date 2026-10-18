@@ -1,14 +1,14 @@
+import 'dart:collection';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/clipboard_entry.dart';
 
-class HistoryProvider extends ChangeNotifier {
-  HistoryProvider({
-    int maxItems = 30,
-    this.maxImageBytes = 5 * 1024 * 1024,
-    this.maxTotalImageBytes = 150 * 1024 * 1024,
-  }) : _maxItems = maxItems;
-
+class HistoryProvider({
+  this._maxItems = 30,
+  this.maxImageBytes = 5 * 1024 * 1024,
+  this.maxTotalImageBytes = 150 * 1024 * 1024,
+}) extends ChangeNotifier {
   /// Default kept conservative — clipboard managers balloon RAM quickly
   /// when users copy screenshots. 30 is comfortable for daily use.
   int _maxItems;
@@ -49,8 +49,10 @@ class HistoryProvider extends ChangeNotifier {
   final int maxTotalImageBytes;
 
   final List<ClipboardEntry> _entries = [];
+  late final UnmodifiableListView<ClipboardEntry> _entriesView =
+      UnmodifiableListView<ClipboardEntry>(_entries);
 
-  List<ClipboardEntry> get entries => List.unmodifiable(_entries);
+  List<ClipboardEntry> get entries => _entriesView;
   int get length => _entries.length;
   bool get isEmpty => _entries.isEmpty;
 

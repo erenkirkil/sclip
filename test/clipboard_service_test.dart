@@ -267,6 +267,54 @@ void main() {
       await sub.cancel();
       await service.dispose();
     });
+
+    test('resetBaseline absorbs current clipboard and allows re-emitting after clear', () async {
+      var current = ClipboardEntry.text('initial');
+      var change = 1;
+      final service = ClipboardService(
+        interval: const Duration(milliseconds: 20),
+        entryReader: () async => current,
+        stateProbe: () async =>
+            ClipboardState(change: change, sensitive: false),
+      );
+
+      final received = <ClipboardEntry>[];
+      final sub = service.entries.listen(received.add);
+
+      service.start();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(received, isEmpty);
+
+      // User copies 'alpha'.
+      current = ClipboardEntry.text('alpha');
+      change++;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(received.length, 1);
+      expect(received.single.text, 'alpha');
+
+      // User clears history while 'alpha' is still on the OS clipboard.
+      service.resetBaseline();
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      // Still 'alpha' with same changeCount -> not re-emitted on idle ticks.
+      expect(received.length, 1);
+
+      // Even if changeCount bumps while 'alpha' is still on clipboard on the
+      // first post-reset observation, _primed=false absorbs it as baseline;
+      // a subsequent copy of 'alpha' after another copy emits again.
+      current = ClipboardEntry.text('beta');
+      change++;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      // First post-reset read primes baseline ('beta'), so next copy of
+      // 'alpha' is recognized as a fresh transition.
+      current = ClipboardEntry.text('alpha');
+      change++;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(received.last.text, 'alpha');
+      expect(received.length, 2);
+
+      await sub.cancel();
+      await service.dispose();
+    });
   });
 
   group('SVG sanitizer', () {

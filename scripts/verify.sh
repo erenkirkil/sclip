@@ -69,10 +69,40 @@ fi
 echo
 
 echo "[ Entitlement ]"
-if grep -q 'com.apple.security.network' macos/Runner/Release.entitlements 2>/dev/null; then
+ENT="macos/Runner/Release.entitlements"
+DMG="scripts/make-dmg.sh"
+
+if [ ! -f "$ENT" ]; then
+  fail "$ENT missing (entitlement gates cannot run)"
+elif grep -q 'com.apple.security.network' "$ENT" 2>/dev/null; then
   fail "network entitlement in Release.entitlements (offline guarantee broken)"
 else
   check "Release.entitlements clean"
+fi
+
+# Hardened runtime is deliberately NOT set in the pbxproj (it would reset the
+# Accessibility TCC grant on every release build); it is applied at signing
+# time by make-dmg.sh instead. The three gates below keep that arrangement
+# honest — see docs/security.md, Risk 7.
+if grep -q 'get-task-allow' "$ENT" 2>/dev/null; then
+  fail "get-task-allow in Release.entitlements (debugger attach re-enabled — docs/security.md Risk 7)"
+else
+  check "no get-task-allow"
+fi
+
+if grep -qE 'cs\.allow-jit|cs\.allow-unsigned-executable-memory|cs\.disable-library-validation' "$ENT" 2>/dev/null; then
+  fail "hardened-runtime exemption in Release.entitlements (cs.allow-jit / cs.allow-unsigned-executable-memory / cs.disable-library-validation)"
+else
+  check "no hardened-runtime exemptions"
+fi
+
+# Comments are stripped first: make-dmg.sh explains the flag in a comment two
+# lines above the codesign call, so a plain grep would keep passing after the
+# flag itself was deleted.
+if grep -v '^[[:space:]]*#' "$DMG" 2>/dev/null | grep -q -- '--options runtime'; then
+  check "make-dmg.sh signs with --options runtime"
+else
+  fail "make-dmg.sh no longer signs with --options runtime (shipped .app would not be hardened)"
 fi
 echo
 

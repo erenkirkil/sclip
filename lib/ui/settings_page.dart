@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -7,18 +6,16 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import '../providers/settings_provider.dart';
 import 'hotkey_recorder_dialog.dart';
 
-/// Modal settings surface. Every change is committed through
+/// Full-window settings surface. Every change is committed through
 /// [SettingsProvider] immediately — there is no "Apply" button, so closing
-/// the modal simply dismisses it without any save step. The "Reset" button
+/// the page simply pops the route without any save step. The "Reset" button
 /// restores defaults in place, which the user can then undo by changing
 /// values again (no confirm dialog — resetting doesn't touch history).
-class SettingsPage extends StatefulWidget {
-  const SettingsPage({
-    super.key,
-    required this.settings,
-    required this.onHotkeyChange,
-  });
-
+class const SettingsPage({
+  super.key,
+  required this.settings,
+  required this.onHotkeyChange,
+}) extends StatefulWidget {
   final SettingsProvider settings;
 
   /// Called when the user commits a new hotkey via the recorder. Returns
@@ -31,32 +28,12 @@ class SettingsPage extends StatefulWidget {
     required SettingsProvider settings,
     required Future<bool> Function(HotKey) onHotkeyChange,
   }) {
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (ctx) {
-        // Derive the modal cap from the current window size rather than a
-        // fixed 520×640 — on a small display (MacBook Air as a secondary)
-        // the parent window itself is shrunk below those numbers and the
-        // modal would otherwise overflow.
-        final window = MediaQuery.sizeOf(ctx);
-        return Dialog(
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 24,
-          ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: math.min(440.0, window.width - 24),
-              maxHeight: math.min(560.0, window.height - 48),
-            ),
-            child: SettingsPage(
-              settings: settings,
-              onHotkeyChange: onHotkeyChange,
-            ),
-          ),
-        );
-      },
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) =>
+            SettingsPage(settings: settings, onHotkeyChange: onHotkeyChange),
+      ),
     );
   }
 
@@ -127,24 +104,41 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     final s = widget.settings;
     final scheme = Theme.of(context).colorScheme;
+    const titleStyle = TextStyle(fontSize: 11.5);
+    const subStyle = TextStyle(fontSize: 10);
+    const tilePadding = EdgeInsets.symmetric(horizontal: 8, vertical: 0);
     return ScaffoldMessenger(
       key: _messengerKey,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Ayarlar'),
+          toolbarHeight: 28,
+          titleSpacing: 4,
+          title: const Text('Ayarlar', style: TextStyle(fontSize: 12.5)),
+          leadingWidth: 28,
           leading: IconButton(
+            iconSize: 15,
+            padding: .zero,
             icon: const Icon(Icons.close),
             onPressed: () => Navigator.of(context).pop(),
           ),
           actions: [
             TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                minimumSize: const Size(0, 24),
+                tapTargetSize: .shrinkWrap,
+              ),
               onPressed: () async {
                 final reset = await showDialog<bool>(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    title: const Text('Varsayılanlara sıfırla'),
+                    title: const Text(
+                      'Varsayılanlara sıfırla',
+                      style: TextStyle(fontSize: 13),
+                    ),
                     content: const Text(
                       'Tüm ayarlar varsayılan değerlere dönecek. Pano geçmişi etkilenmez.',
+                      style: TextStyle(fontSize: 11.5),
                     ),
                     actions: [
                       TextButton(
@@ -165,118 +159,203 @@ class _SettingsPageState extends State<SettingsPage> {
                   await widget.onHotkeyChange(s.toggleHotkey);
                 }
               },
-              child: const Text('Sıfırla'),
+              child: const Text('Sıfırla', style: TextStyle(fontSize: 11)),
             ),
           ],
         ),
-        body: ListView(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          children: [
-            _SectionHeader('Kısayollar'),
-            ListTile(
-              title: const Text('Pano aç/kapa'),
-              subtitle: Text(_hotkeyLabel(s.toggleHotkey)),
-              trailing: FilledButton.tonalIcon(
-                icon: Icon(
-                  _recordingHotkey ? Icons.fiber_manual_record : Icons.keyboard,
+        body: ListTileTheme(
+          data: const ListTileThemeData(
+            dense: true,
+            minVerticalPadding: 2,
+            contentPadding: tilePadding,
+            visualDensity: VisualDensity(horizontal: -4, vertical: -4),
+            titleTextStyle: titleStyle,
+            subtitleTextStyle: subStyle,
+          ),
+          child: ListView(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            children: [
+              const _SectionHeader('Kısayollar'),
+              ListTile(
+                title: const Text('Pano aç/kapa', style: titleStyle),
+                subtitle: Text(_hotkeyLabel(s.toggleHotkey), style: subStyle),
+                trailing: FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    minimumSize: const Size(0, 24),
+                    tapTargetSize: .shrinkWrap,
+                    textStyle: const TextStyle(fontSize: 11),
+                  ),
+                  icon: Icon(
+                    _recordingHotkey
+                        ? Icons.fiber_manual_record
+                        : Icons.keyboard,
+                    size: 13,
+                  ),
+                  label: Text(_recordingHotkey ? 'Kaydediliyor…' : 'Değiştir'),
+                  onPressed: _recordingHotkey ? null : _openHotkeyRecorder,
                 ),
-                label: Text(_recordingHotkey ? 'Kaydediliyor…' : 'Değiştir'),
-                onPressed: _recordingHotkey ? null : _openHotkeyRecorder,
               ),
-            ),
-            const Divider(),
-            _SectionHeader('Görünüm'),
-            RadioGroup<ThemeMode>(
-              groupValue: s.themeMode,
-              onChanged: (v) {
-                if (v != null) unawaited(s.setThemeMode(v));
-              },
-              child: const Column(
-                children: [
-                  _ThemeRadioTile(label: 'Sistem', value: ThemeMode.system),
-                  _ThemeRadioTile(label: 'Açık', value: ThemeMode.light),
-                  _ThemeRadioTile(label: 'Koyu', value: ThemeMode.dark),
-                ],
-              ),
-            ),
-            const Divider(),
-            _SectionHeader('Geçmiş'),
-            ListTile(
-              title: const Text('Maksimum öğe sayısı'),
-              subtitle: Text('${s.maxItems} öğe'),
-              trailing: DropdownButton<int>(
-                value: s.maxItems,
-                items: [
-                  for (final v in SettingsProvider.allowedMaxItems)
-                    DropdownMenuItem(value: v, child: Text('$v')),
-                ],
+              const Divider(height: 6),
+              const _SectionHeader('Görünüm'),
+              RadioGroup<ThemeMode>(
+                groupValue: s.themeMode,
                 onChanged: (v) {
-                  if (v != null) unawaited(s.setMaxItems(v));
+                  if (v != null) unawaited(s.setThemeMode(v));
                 },
-              ),
-            ),
-            SwitchListTile(
-              title: const Text('Hassas içerik filtresi'),
-              subtitle: Text(
-                s.sensitiveFilterEnabled
-                    ? '1Password/Bitwarden gibi uygulamalardan gelen şifreler yakalanmaz.'
-                    : 'Uyarı: hassas içerik geçmişe düşebilir.',
-                style: TextStyle(
-                  color: s.sensitiveFilterEnabled ? null : scheme.error,
+                child: const Column(
+                  children: [
+                    _ThemeRadioTile(label: 'Sistem', value: .system),
+                    _ThemeRadioTile(label: 'Açık', value: .light),
+                    _ThemeRadioTile(label: 'Koyu', value: .dark),
+                  ],
                 ),
               ),
-              value: s.sensitiveFilterEnabled,
-              onChanged: s.setSensitiveFilterEnabled,
-            ),
-            const Divider(),
-            _SectionHeader('Pencere'),
-            SwitchListTile(
-              title: const Text('Odak kaybında gizle'),
-              subtitle: const Text(
-                'Başka bir uygulamaya tıklayınca sclip otomatik gizlenir.',
+              SwitchListTile(
+                dense: true,
+                contentPadding: tilePadding,
+                title: const Text(
+                  'Koyu temayı siyahlaştır (OLED)',
+                  style: titleStyle,
+                ),
+                subtitle: Text(
+                  s.themeMode == .light
+                      ? 'Yalnızca koyu tema için geçerli.'
+                      : 'Yüzeyler saf siyaha iner; marka rengi değişmez.',
+                  style: subStyle,
+                ),
+                value: s.trueDark,
+                // Light mode never builds darkTheme, so the switch would be
+                // a control that visibly changes nothing. It stays on screen
+                // (the preference is still persisted, and "Sistem" can flip
+                // to dark at any moment) but goes inert.
+                onChanged: s.themeMode == .light ? null : s.setTrueDark,
               ),
-              value: s.autoHideOnBlur,
-              onChanged: s.setAutoHideOnBlur,
-            ),
-            SwitchListTile(
-              title: const Text('Üste sabitle'),
-              subtitle: const Text(
-                'Pencere her zaman diğer uygulamaların üstünde kalır. Tray menüsüyle senkron.',
+              const Divider(height: 6),
+              const _SectionHeader('Geçmiş'),
+              ListTile(
+                title: const Text('Maksimum öğe sayısı', style: titleStyle),
+                subtitle: Text('${s.maxItems} öğe', style: subStyle),
+                trailing: DropdownButton<int>(
+                  isDense: true,
+                  style: TextStyle(fontSize: 11.5, color: scheme.onSurface),
+                  value: s.maxItems,
+                  items: [
+                    for (final v in SettingsProvider.allowedMaxItems)
+                      DropdownMenuItem(value: v, child: Text('$v')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) unawaited(s.setMaxItems(v));
+                  },
+                ),
               ),
-              value: s.alwaysOnTopDefault,
-              onChanged: s.setAlwaysOnTopDefault,
-            ),
-            const Divider(),
-            ExpansionTile(
-              title: const Text('Gelişmiş'),
-              initiallyExpanded: _advancedExpanded,
-              onExpansionChanged: (v) => setState(() => _advancedExpanded = v),
-              children: [
-                ListTile(
-                  title: const Text('Polling aralığı'),
-                  subtitle: Text('${s.pollingIntervalMs} ms'),
-                  trailing: DropdownButton<int>(
-                    value: s.pollingIntervalMs,
-                    items: [
-                      for (final v in SettingsProvider.allowedPollingMs)
-                        DropdownMenuItem(value: v, child: Text('$v ms')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) unawaited(s.setPollingIntervalMs(v));
-                    },
+              SwitchListTile(
+                dense: true,
+                contentPadding: tilePadding,
+                title: const Text('Hassas içerik filtresi', style: titleStyle),
+                subtitle: Text(
+                  s.sensitiveFilterEnabled
+                      ? '1Password/Bitwarden gibi uygulamalardan gelen şifreler yakalanmaz.'
+                      : 'Uyarı: hassas içerik geçmişe düşebilir.',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: s.sensitiveFilterEnabled ? null : scheme.error,
                   ),
                 ),
-                SwitchListTile(
-                  title: const Text('Başlangıçta geçmişi temizle'),
-                  subtitle: const Text(
-                    'Uygulama açılırken önceki oturumun belleği zaten uçar — bu, açılış anını garantiler.',
-                  ),
-                  value: s.clearOnStartup,
-                  onChanged: s.setClearOnStartup,
+                value: s.sensitiveFilterEnabled,
+                onChanged: s.setSensitiveFilterEnabled,
+              ),
+              SwitchListTile(
+                dense: true,
+                contentPadding: tilePadding,
+                title: const Text(
+                  'Ekran kilitlendiğinde geçmişi temizle',
+                  style: titleStyle,
                 ),
-              ],
-            ),
-          ],
+                subtitle: const Text(
+                  'Kilidi açtığında geçmiş boş olur. Panonun kendisi ve '
+                  'geçici dosyalar korunur — Cmd/Ctrl+V çalışmaya devam eder.',
+                  style: subStyle,
+                ),
+                value: s.clearOnScreenLock,
+                onChanged: s.setClearOnScreenLock,
+              ),
+              const Divider(height: 6),
+              const _SectionHeader('Pencere'),
+              SwitchListTile(
+                dense: true,
+                contentPadding: tilePadding,
+                title: const Text('Odak kaybında gizle', style: titleStyle),
+                subtitle: const Text(
+                  'Başka bir uygulamaya tıklayınca sclip otomatik gizlenir.',
+                  style: subStyle,
+                ),
+                value: s.autoHideOnBlur,
+                onChanged: s.setAutoHideOnBlur,
+              ),
+              SwitchListTile(
+                dense: true,
+                contentPadding: tilePadding,
+                title: const Text('Üste sabitle', style: titleStyle),
+                subtitle: const Text(
+                  'Pencere her zaman diğer uygulamaların üstünde kalır. Tray menüsüyle senkron.',
+                  style: subStyle,
+                ),
+                value: s.alwaysOnTopDefault,
+                onChanged: s.setAlwaysOnTopDefault,
+              ),
+              const Divider(height: 6),
+              ExpansionTile(
+                tilePadding: tilePadding,
+                visualDensity: const VisualDensity(
+                  horizontal: -4,
+                  vertical: -4,
+                ),
+                title: const Text('Gelişmiş', style: titleStyle),
+                initiallyExpanded: _advancedExpanded,
+                onExpansionChanged: (v) =>
+                    setState(() => _advancedExpanded = v),
+                children: [
+                  ListTile(
+                    title: const Text('Polling aralığı', style: titleStyle),
+                    subtitle: Text(
+                      '${s.pollingIntervalMs} ms',
+                      style: subStyle,
+                    ),
+                    trailing: DropdownButton<int>(
+                      isDense: true,
+                      style: TextStyle(fontSize: 11.5, color: scheme.onSurface),
+                      value: s.pollingIntervalMs,
+                      items: [
+                        for (final v in SettingsProvider.allowedPollingMs)
+                          DropdownMenuItem(value: v, child: Text('$v ms')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) unawaited(s.setPollingIntervalMs(v));
+                      },
+                    ),
+                  ),
+                  SwitchListTile(
+                    dense: true,
+                    contentPadding: tilePadding,
+                    title: const Text(
+                      'Başlangıçta geçmişi temizle',
+                      style: titleStyle,
+                    ),
+                    subtitle: const Text(
+                      'Uygulama açılırken önceki oturumun belleği zaten uçar — bu, açılış anını garantiler.',
+                      style: subStyle,
+                    ),
+                    value: s.clearOnStartup,
+                    onChanged: s.setClearOnStartup,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -301,36 +380,42 @@ class _SettingsPageState extends State<SettingsPage> {
   };
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.text);
+class const _SectionHeader(this.text) extends StatelessWidget {
   final String text;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
       child: Text(
         text.toUpperCase(),
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: Theme.of(context).colorScheme.primary,
-          letterSpacing: 0.8,
+          fontSize: 9.5,
+          letterSpacing: 0.7,
         ),
       ),
     );
   }
 }
 
-class _ThemeRadioTile extends StatelessWidget {
-  const _ThemeRadioTile({required this.label, required this.value});
-
+class const _ThemeRadioTile({required this.label, required this.value})
+    extends StatelessWidget {
   final String label;
   final ThemeMode value;
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      title: Text(label),
-      leading: Radio<ThemeMode>(value: value),
+      dense: true,
+      minLeadingWidth: 0,
+      horizontalTitleGap: 4,
+      title: Text(label, style: const TextStyle(fontSize: 11.5)),
+      leading: Radio<ThemeMode>(
+        value: value,
+        materialTapTargetSize: .shrinkWrap,
+        visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+      ),
       onTap: () {
         // Trigger the ambient RadioGroup's onChanged by dispatching the
         // selection through the Radio's own registered value. The simplest

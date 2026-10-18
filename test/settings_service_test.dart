@@ -22,6 +22,10 @@ void main() {
       expect(s.alwaysOnTopDefault, false);
       expect(s.pollingIntervalMs, 500);
       expect(s.clearOnStartup, false);
+      // Auto-clear is opt-in: a user who never opens settings must never
+      // lose history to a screen lock.
+      expect(s.clearOnScreenLock, false);
+      expect(s.trueDark, false);
       expect(s.toggleHotkey, isNull);
     });
 
@@ -86,6 +90,8 @@ void main() {
       await s.setAlwaysOnTopDefault(true);
       await s.setPollingIntervalMs(250);
       await s.setClearOnStartup(true);
+      await s.setClearOnScreenLock(true);
+      await s.setTrueDark(true);
       await s.setToggleHotkey(
         HotKey(
           key: PhysicalKeyboardKey.keyV,

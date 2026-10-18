@@ -14,13 +14,19 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // per-session so different users on one machine can still run their own.
   // The handle is intentionally never closed: the OS releases it (and the
   // mutex) at process exit.
-  ::CreateMutexW(nullptr, TRUE, L"Local\\sclip-single-instance");
-  if (::GetLastError() == ERROR_ALREADY_EXISTS) {
+  HANDLE instance_mutex =
+      ::CreateMutexW(nullptr, TRUE, L"Local\\sclip-single-instance");
+  const DWORD mutex_err = ::GetLastError();
+  if (instance_mutex == nullptr || mutex_err == ERROR_ALREADY_EXISTS ||
+      mutex_err == ERROR_ACCESS_DENIED) {
     // Hand focus to the existing instance instead of dying silently.
     HWND existing = ::FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", L"sclip");
     if (existing != nullptr) {
-      ::ShowWindow(existing, SW_SHOW);
+      ::ShowWindow(existing, ::IsIconic(existing) ? SW_RESTORE : SW_SHOW);
       ::SetForegroundWindow(existing);
+    }
+    if (instance_mutex != nullptr) {
+      ::CloseHandle(instance_mutex);
     }
     return EXIT_FAILURE;
   }

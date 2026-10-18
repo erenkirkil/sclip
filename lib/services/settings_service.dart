@@ -15,9 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// `~/Library/Preferences`); Windows with a JSON file under `%APPDATA%`.
 /// Neither receives `ClipboardEntry` content under any code path — the
 /// regression test in `test/settings_service_test.dart` asserts this.
-class SettingsService {
-  SettingsService(this._prefs);
-
+class SettingsService(this._prefs) {
   static const prefix = 'sclip.settings.';
 
   static const _kThemeMode = '${prefix}themeMode';
@@ -27,6 +25,8 @@ class SettingsService {
   static const _kAlwaysOnTop = '${prefix}alwaysOnTopDefault';
   static const _kPollingMs = '${prefix}pollingIntervalMs';
   static const _kClearOnStartup = '${prefix}clearOnStartup';
+  static const _kClearOnScreenLock = '${prefix}clearOnScreenLock';
+  static const _kTrueDark = '${prefix}trueDark';
   static const _kHotkey = '${prefix}toggleHotkey';
 
   final SharedPreferences _prefs;
@@ -39,9 +39,9 @@ class SettingsService {
   // ThemeMode stored as enum name (`system` / `light` / `dark`). Unknown
   // values fall back to system so a future schema downgrade doesn't crash.
   ThemeMode get themeMode => switch (_prefs.getString(_kThemeMode)) {
-    'light' => ThemeMode.light,
-    'dark' => ThemeMode.dark,
-    _ => ThemeMode.system,
+    'light' => .light,
+    'dark' => .dark,
+    _ => .system,
   };
 
   Future<void> setThemeMode(ThemeMode mode) =>
@@ -66,6 +66,21 @@ class SettingsService {
 
   bool get clearOnStartup => _prefs.getBool(_kClearOnStartup) ?? false;
   Future<void> setClearOnStartup(bool v) => _prefs.setBool(_kClearOnStartup, v);
+
+  /// Wipe the in-memory history when the OS session locks. Default off:
+  /// the trigger is destructive and irreversible (no undo), so it only
+  /// ever runs for a user who explicitly asked for it.
+  bool get clearOnScreenLock => _prefs.getBool(_kClearOnScreenLock) ?? false;
+  Future<void> setClearOnScreenLock(bool v) =>
+      _prefs.setBool(_kClearOnScreenLock, v);
+
+  /// OLED variant of the dark palette. Deliberately a *second axis* rather
+  /// than a fourth [themeMode] value: folding "black" into the enum would
+  /// have pinned it to [ThemeMode.dark] and killed "follow the system".
+  /// `_kThemeMode`'s stored values are untouched by this key, so there is
+  /// no migration for an existing install.
+  bool get trueDark => _prefs.getBool(_kTrueDark) ?? false;
+  Future<void> setTrueDark(bool v) => _prefs.setBool(_kTrueDark, v);
 
   HotKey? get toggleHotkey {
     final raw = _prefs.getString(_kHotkey);

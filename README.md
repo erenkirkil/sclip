@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Offline, RAM-only clipboard manager for macOS &amp; Windows.</strong><br>
-  Built in Flutter. No cloud sync, no disk writes for clipboard content, no network access.
+  Built in Flutter. No cloud sync, no network access, no clipboard history on disk.
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
 
 ## Why
 
-Most clipboard managers either sync history through the cloud or persist it to disk, which trades convenience for confidentiality. sclip keeps the entire history in-process: when you quit the app, the history is gone. Settings live in `shared_preferences`; clipboard content never touches a database, a file, or the network.
+Most clipboard managers either sync history through the cloud or persist it to disk, which trades convenience for confidentiality. sclip keeps the entire history in-process: when you quit the app, the history is gone. Settings live in `shared_preferences`; the history itself never reaches a database or the network. The one documented exception is a short-lived temp file: pasting an SVG, a PDF or an image set into a file-handler target (Telegram, Finder, Mail) requires a real file on disk, so those bytes are materialised, then cleaned up on eviction, on quit, and on next launch — see [Security](#security).
 
 The macOS build ships with `com.apple.security.network.*` entitlements removed. The Windows build links no networking code. A CI gate enforces both: pushes that introduce `HttpClient`, `dart:io` sockets, or a network entitlement fail before merge.
 
@@ -28,7 +28,7 @@ The macOS build ships with `com.apple.security.network.*` entitlements removed. 
 - **Tray-resident**: lives in the menu bar / system tray; no Dock or taskbar footprint.
 - **Smart paste**: hides itself, restores focus to the previous app, posts the paste keystroke. PID/HWND verification aborts the paste if the target window changed during the focus race.
 - **Sensitive content filter**: skips entries where the source app set the OS-level concealed flag (1Password, Bitwarden, etc.).
-- **Customisable**: theme (system/light/dark), history limit (10–200), hotkey, window prefs.
+- **Customisable**: theme (system/light/dark), history limit (10 / 30 / 50 / 100), hotkey, window prefs.
 
 ## Format support
 
@@ -96,7 +96,7 @@ Download the release ZIP, extract anywhere, run `sclip.exe`. SmartScreen may war
 
 ## Build from source
 
-Requires Flutter with Dart SDK 3.10+ (stable channel).
+Requires Flutter with Dart SDK 3.13+ (stable channel).
 
 ```bash
 git clone https://github.com/erenkirkil/sclip.git
@@ -120,14 +120,14 @@ For a signed + notarised DMG (requires an Apple Developer Program membership), s
 | Enter | Copy + paste into previous app |
 | Shift+Enter / Shift+Click | Paste as plain text (markup stripped) |
 | Delete / Backspace | Remove entry |
-| Esc | Hide panel |
+| Esc | Close the open dialog or search bar, or hide the panel |
 
 ## Quality gate
 
 ```bash
 bash scripts/verify.sh
 ```
-Runs format check, `flutter analyze --fatal-warnings`, `flutter test`, forbidden-pattern scan (no network code in `lib/`), and entitlement check. Same checks the [CI workflow](.github/workflows/ci.yml) enforces on push.
+Runs format check, `flutter analyze --fatal-warnings`, `flutter test`, a forbidden-pattern scan (no network code in `lib/`), and the entitlement gates: no network entitlement, no `get-task-allow`, no `com.apple.security.cs.*` hardened-runtime exemption, and `make-dmg.sh` still signing with `--options runtime`. Same checks the [CI workflow](.github/workflows/ci.yml) enforces on push.
 
 ## Tech
 

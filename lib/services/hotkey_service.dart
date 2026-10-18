@@ -6,9 +6,7 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 
 typedef HotkeyCallback = Future<void> Function();
 
-class HotkeyService {
-  HotkeyService({required this.onToggleWindow});
-
+class HotkeyService({required this.onToggleWindow}) {
   static const _windowChannel = MethodChannel('sclip/window');
 
   final HotkeyCallback onToggleWindow;

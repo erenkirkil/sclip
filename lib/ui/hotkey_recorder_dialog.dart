@@ -6,9 +6,8 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 /// so we own the confirmation step — raw `HotKeyRecorder` fires on every
 /// partial combo as modifiers drop, and we don't want to commit until the
 /// user explicitly confirms.
-class HotkeyRecorderDialog extends StatefulWidget {
-  const HotkeyRecorderDialog({super.key, required this.initial});
-
+class const HotkeyRecorderDialog({super.key, required this.initial})
+    extends StatefulWidget {
   final HotKey initial;
 
   /// Shows the dialog and resolves to the confirmed combo, or null when
@@ -48,31 +47,41 @@ class _HotkeyRecorderDialogState extends State<HotkeyRecorderDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Kısayolu kaydet'),
+      scrollable: true,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      titlePadding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      contentPadding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      title: const Text('Kısayolu kaydet', style: TextStyle(fontSize: 13)),
       content: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: .min,
         children: [
           const Text(
             'İstediğin tuş kombinasyonuna bas. En az 2 modifier '
             '(Cmd/Ctrl/Alt/Shift) + bir tuş gerekli.',
-            textAlign: TextAlign.center,
+            textAlign: .center,
+            style: TextStyle(fontSize: 11),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 10),
           Container(
-            constraints: const BoxConstraints(minHeight: 64),
-            alignment: Alignment.center,
+            constraints: const BoxConstraints(minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            alignment: .center,
             decoration: BoxDecoration(
               border: Border.all(
                 color: Theme.of(context).colorScheme.outlineVariant,
               ),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(6),
             ),
             child: _recording
                 ? HotKeyRecorder(
                     initalHotKey: widget.initial,
                     onHotKeyRecorded: _onRecorded,
                   )
-                : HotKeyVirtualView(hotKey: _captured!),
+                : FittedBox(
+                    fit: .scaleDown,
+                    child: HotKeyVirtualView(hotKey: _captured!),
+                  ),
           ),
           if (!_recording)
             TextButton(
@@ -80,20 +89,23 @@ class _HotkeyRecorderDialogState extends State<HotkeyRecorderDialog> {
                 _captured = null;
                 _recording = true;
               }),
-              child: const Text('Yeniden kaydet'),
+              child: const Text(
+                'Yeniden kaydet',
+                style: TextStyle(fontSize: 11),
+              ),
             ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Vazgeç'),
+          child: const Text('Vazgeç', style: TextStyle(fontSize: 11.5)),
         ),
         FilledButton(
           onPressed: (_captured == null || !_isValid(_captured!))
               ? null
               : () => Navigator.of(context).pop(_captured),
-          child: const Text('Kaydet'),
+          child: const Text('Kaydet', style: TextStyle(fontSize: 11.5)),
         ),
       ],
     );

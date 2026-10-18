@@ -96,21 +96,6 @@ DisplayInfo? displayContaining(Offset point, List<DisplayInfo> displays) {
   return displays.first;
 }
 
-/// Window size used while the settings modal is open, adapted to the
-/// display it will live on. We cap at the [preferredSize] for
-/// comfort on big monitors, but shrink to ~70% of the display's
-/// visible area on small screens so the modal never dominates — a
-/// MacBook Air is cramped enough already without sclip eating most of
-/// the screen.
-Size settingsSizeFor(Rect bounds, Size preferredSize) {
-  final w = math.min(preferredSize.width, math.max(380.0, bounds.width * 0.7));
-  final h = math.min(
-    preferredSize.height,
-    math.max(440.0, bounds.height * 0.7),
-  );
-  return Size(w, h);
-}
-
 /// Shift [position] just enough so that a [size]-sized window sits
 /// fully inside [bounds] with an 8-px margin. Preserves the user's
 /// anchor (top-right from tray stays top-right, centred stays centred)

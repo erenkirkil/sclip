@@ -16,6 +16,8 @@ class SettingsProvider extends ChangeNotifier {
       _alwaysOnTopDefault = _service.alwaysOnTopDefault,
       _pollingIntervalMs = _service.pollingIntervalMs,
       _clearOnStartup = _service.clearOnStartup,
+      _clearOnScreenLock = _service.clearOnScreenLock,
+      _trueDark = _service.trueDark,
       _toggleHotkey =
           _service.toggleHotkey ?? SettingsService.defaultToggleHotkey();
 
@@ -28,6 +30,8 @@ class SettingsProvider extends ChangeNotifier {
   bool _alwaysOnTopDefault;
   int _pollingIntervalMs;
   bool _clearOnStartup;
+  bool _clearOnScreenLock;
+  bool _trueDark;
   HotKey _toggleHotkey;
 
   ThemeMode get themeMode => _themeMode;
@@ -38,6 +42,8 @@ class SettingsProvider extends ChangeNotifier {
   Duration get pollingInterval => Duration(milliseconds: _pollingIntervalMs);
   int get pollingIntervalMs => _pollingIntervalMs;
   bool get clearOnStartup => _clearOnStartup;
+  bool get clearOnScreenLock => _clearOnScreenLock;
+  bool get trueDark => _trueDark;
   HotKey get toggleHotkey => _toggleHotkey;
 
   static const allowedMaxItems = [10, 30, 50, 100];
@@ -92,6 +98,20 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setClearOnScreenLock(bool v) async {
+    if (_clearOnScreenLock == v) return;
+    _clearOnScreenLock = v;
+    await _service.setClearOnScreenLock(v);
+    notifyListeners();
+  }
+
+  Future<void> setTrueDark(bool v) async {
+    if (_trueDark == v) return;
+    _trueDark = v;
+    await _service.setTrueDark(v);
+    notifyListeners();
+  }
+
   Future<void> setToggleHotkey(HotKey hotkey) async {
     _toggleHotkey = hotkey;
     await _service.setToggleHotkey(hotkey);
@@ -107,6 +127,8 @@ class SettingsProvider extends ChangeNotifier {
     _alwaysOnTopDefault = _service.alwaysOnTopDefault;
     _pollingIntervalMs = _service.pollingIntervalMs;
     _clearOnStartup = _service.clearOnStartup;
+    _clearOnScreenLock = _service.clearOnScreenLock;
+    _trueDark = _service.trueDark;
     _toggleHotkey = SettingsService.defaultToggleHotkey();
     notifyListeners();
   }

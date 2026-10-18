@@ -4,15 +4,13 @@ import 'package:flutter/material.dart';
 /// capability sclip depends on is unavailable (Accessibility permission,
 /// global hotkey). Tapping runs [onTap] — typically "open the relevant
 /// settings".
-class WarningBanner extends StatelessWidget {
-  const WarningBanner({
-    super.key,
-    required this.icon,
-    required this.message,
-    required this.actionLabel,
-    required this.onTap,
-  });
-
+class const WarningBanner({
+  super.key,
+  required this.icon,
+  required this.message,
+  required this.actionLabel,
+  required this.onTap,
+}) extends StatelessWidget {
   final IconData icon;
   final String message;
   final String actionLabel;
@@ -36,25 +34,26 @@ class WarningBanner extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Row(
               children: [
-                Icon(icon, size: 16, color: scheme.onErrorContainer),
-                const SizedBox(width: 8),
+                Icon(icon, size: 13, color: scheme.onErrorContainer),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     message,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 10.5,
                       color: scheme.onErrorContainer,
                     ),
                   ),
                 ),
+                const SizedBox(width: 4),
                 Text(
                   actionLabel,
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 10.5,
+                    fontWeight: .w600,
                     color: scheme.onErrorContainer,
                   ),
                 ),
@@ -67,9 +66,8 @@ class WarningBanner extends StatelessWidget {
   }
 }
 
-class AccessibilityBanner extends StatelessWidget {
-  const AccessibilityBanner({super.key, required this.onTap});
-
+class const AccessibilityBanner({super.key, required this.onTap})
+    extends StatelessWidget {
   final VoidCallback onTap;
 
   @override

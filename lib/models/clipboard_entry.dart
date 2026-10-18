@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
+import '../services/search_text.dart';
+
 enum ClipboardEntryType {
   text,
   image,
@@ -292,6 +294,68 @@ class ClipboardEntry {
     }
   }
 
+  /// Hard cap on [searchIndex]. A 2 MB text copy would otherwise park a
+  /// second 2 MB normalized string next to the original and make every
+  /// keystroke scan it; 8 KB is already far past the point where a
+  /// substring hit still tells the user which entry this is.
+  static const _searchIndexMaxChars = 8192;
+
+  /// Normalized haystack behind the search box. Computed lazily, once per
+  /// instance, exactly like [preview] — but unlike [preview] it is not cut
+  /// at 120 chars and never collapses a file list into "+ N daha", so
+  /// "I copied this, why can't I find it" cannot happen.
+  late final String searchIndex = _computeSearchIndex();
+
+  String _computeSearchIndex() {
+    final raw = _rawSearchText();
+    // Truncate before normalizing, not after: normalization is O(n) and a
+    // 2 MB entry would otherwise pay for a haystack we immediately throw
+    // away. Safe on the cap, because folding is 1:1 per code unit and
+    // whitespace only ever collapses — the result can't grow past the cut.
+    return normalizeForSearch(
+      raw.length > _searchIndexMaxChars
+          ? raw.substring(0, _searchIndexMaxChars)
+          : raw,
+    );
+  }
+
+  /// Type-specific haystack source, before normalization. Binary types
+  /// contribute Turkish + technical tags instead of bytes: the user
+  /// searches for "resim" or "png", never for the pixels.
+  String _rawSearchText() {
+    switch (type) {
+      case .text:
+      case .richText:
+      case .color:
+        return text ?? '';
+      case .url:
+        // Display text and URI diverge for the synthesized mailto:/tel:
+        // entries, where the user copied the bare address — index both.
+        final display = text ?? '';
+        final list = uris ?? const <Uri>[];
+        final uri = list.isEmpty ? '' : list.first.toString();
+        return display == uri ? display : '$display $uri';
+      case .files:
+        final list = uris ?? const <Uri>[];
+        // Basenames only: full paths bury the name under a directory
+        // prefix that is identical for every entry in the history.
+        return 'dosya ${list.map(_basenameOf).join(' ')}';
+      case .image:
+        return 'resim ${imageFormat?.name ?? ''}';
+      case .imageSet:
+        final formats = imagesFormats ?? const <ClipboardImageFormat>[];
+        return 'resim ${formats.map((f) => f.name).toSet().join(' ')}';
+      case .pdf:
+        return 'pdf';
+      case .svg:
+        // Raw XML is deliberately not indexed: 'path', 'fill' and 'svg'
+        // occur in every vector file and would match everything.
+        return 'svg';
+    }
+  }
+
+  static final _pathSepRe = RegExp(r'[/\\]');
+
   /// Last path component of a file URI (or path-like string), tolerant to
   /// both `/` and `\` separators so a Windows path like
   /// `C:\Users\foo\bar.txt` reads `bar.txt` even when the URI was decoded
@@ -299,7 +363,7 @@ class ClipboardEntry {
   /// found so we never display an empty cell.
   static String _basenameOf(Uri uri) {
     final path = uri.isScheme('file') ? uri.toFilePath() : uri.toString();
-    final sep = path.lastIndexOf(RegExp(r'[/\\]'));
+    final sep = path.lastIndexOf(_pathSepRe);
     return sep >= 0 && sep < path.length - 1 ? path.substring(sep + 1) : path;
   }
 
@@ -383,10 +447,19 @@ class ClipboardEntry {
     caseSensitive: false,
   );
 
+  static final RegExp _rgbNumRe = RegExp(r'\d{1,3}|0?\.\d+');
+  static final RegExp _hslNumRe = RegExp(r'\d{1,3}(?:\.\d+)?|0?\.\d+');
+
+  /// Cached ARGB32 representation for [ClipboardEntryType.color] so tile
+  /// rebuilds don't re-run regex parsing on every frame.
+  late final int? argb32 = _computeArgb32();
+
   /// Parses the stored color text into ARGB32. Returns null if not a color
   /// entry or cannot be parsed. Supports #RGB, #RGBA, #RRGGBB, #RRGGBBAA,
   /// rgb()/rgba() and hsl()/hsla().
-  int? toArgb32() {
+  int? toArgb32() => argb32;
+
+  int? _computeArgb32() {
     if (type != ClipboardEntryType.color) return null;
     final raw = (text ?? '').trim();
     if (raw.isEmpty) return null;
@@ -414,7 +487,7 @@ class ClipboardEntry {
       return _hslToArgb32(raw);
     }
 
-    final rgb = RegExp(r'\d{1,3}|0?\.\d+').allMatches(raw).toList();
+    final rgb = _rgbNumRe.allMatches(raw).toList();
     if (rgb.length < 3) return null;
     final r = int.parse(rgb[0].group(0)!).clamp(0, 255);
     final g = int.parse(rgb[1].group(0)!).clamp(0, 255);
@@ -431,9 +504,7 @@ class ClipboardEntry {
   /// Standard CSS HSL→RGB conversion for a legacy-syntax hsl()/hsla()
   /// string that already matched [_hslColorRe].
   static int? _hslToArgb32(String raw) {
-    final nums = RegExp(
-      r'\d{1,3}(?:\.\d+)?|0?\.\d+',
-    ).allMatches(raw).map((m) => m.group(0)!).toList();
+    final nums = _hslNumRe.allMatches(raw).map((m) => m.group(0)!).toList();
     if (nums.length < 3) return null;
     final h = (double.parse(nums[0]) % 360) / 360;
     final s = (double.parse(nums[1]) / 100).clamp(0.0, 1.0);
@@ -501,18 +572,19 @@ class ClipboardEntry {
   /// `+` and country code: bare digit runs ('2024', order numbers, PINs)
   /// would otherwise false-positive constantly.
   static final RegExp _phoneRe = RegExp(r'^\+[1-9][0-9 ().\-]{6,18}$');
+  static final RegExp _nonDigitRe = RegExp(r'[^0-9]');
 
   static bool looksLikePhone(String value) {
     final v = value.trim();
     if (!_phoneRe.hasMatch(v)) return false;
-    final digits = v.replaceAll(RegExp(r'[^0-9]'), '');
+    final digits = v.replaceAll(_nonDigitRe, '');
     // E.164: country code + subscriber, 8-15 digits total.
     return digits.length >= 8 && digits.length <= 15;
   }
 
   /// Digits-only (plus leading +) form for a `tel:` URI.
   static String normalizePhone(String value) =>
-      '+${value.replaceAll(RegExp(r'[^0-9]'), '')}';
+      '+${value.replaceAll(_nonDigitRe, '')}';
 
   static bool looksLikeUrl(String value) {
     final trimmed = value.trim();

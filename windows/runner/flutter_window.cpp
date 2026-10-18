@@ -155,6 +155,25 @@ bool FlutterWindow::OnCreate() {
           // Lock-free and cheap — no need to cache.
           bool has_files = IsClipboardFormatAvailable(CF_HDROP) != 0;
 
+          // Session lock, on the same probe: when the workstation is
+          // locked the input desktop is Winlogon's secure desktop, which
+          // this process cannot open, so the call fails with a null
+          // handle. user32 is already in CMake's default MSVC link set, so
+          // this needs no CMakeLists change. Success means unlocked and
+          // the handle is ours to close immediately — a null return owns
+          // nothing and needs no cleanup.
+          //
+          // Known false positive: a UAC consent prompt also switches to a
+          // secure desktop, so an elevation prompt reads as "locked" for
+          // its duration. With clearOnScreenLock ON that costs the user a
+          // history wipe. Verify on real hardware in Faz 7 before the
+          // Windows build ships.
+          HDESK input_desktop = OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS);
+          bool locked = input_desktop == nullptr;
+          if (input_desktop != nullptr) {
+            CloseDesktop(input_desktop);
+          }
+
           flutter::EncodableMap map;
           map[flutter::EncodableValue("change")] =
               flutter::EncodableValue(static_cast<int64_t>(seq));
@@ -162,6 +181,8 @@ bool FlutterWindow::OnCreate() {
               flutter::EncodableValue(sensitive);
           map[flutter::EncodableValue("hasFiles")] =
               flutter::EncodableValue(has_files);
+          map[flutter::EncodableValue("locked")] =
+              flutter::EncodableValue(locked);
           result->Success(flutter::EncodableValue(map));
         } else if (call.method_name() == "readFiles") {
           // Reads CF_HDROP (the standard "files copied in Explorer" format)

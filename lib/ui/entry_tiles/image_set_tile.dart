@@ -12,17 +12,15 @@ import 'tile_shared.dart';
 /// node so the "autofocus first entry" flow lands on it; Arrow keys walk
 /// the grid, row-end ArrowRight hops to the action column and remembers
 /// the origin so ArrowLeft returns to the same row.
-class ImageSetTile extends StatefulWidget {
-  const ImageSetTile({
-    super.key,
-    required this.entry,
-    required this.onDelete,
-    this.onImageTap,
-    this.onPasteAll,
-    this.autofocus = false,
-    this.focusNode,
-  });
-
+class const ImageSetTile({
+  super.key,
+  required this.entry,
+  required this.onDelete,
+  this.onImageTap,
+  this.onPasteAll,
+  this.autofocus = false,
+  this.focusNode,
+}) extends StatefulWidget {
   final ClipboardEntry entry;
   final VoidCallback onDelete;
 
@@ -123,11 +121,13 @@ class _ImageSetTileState extends State<ImageSetTile> with AdoptableTileFocus {
     // rebuilds on constraint changes, so there is no per-frame churn.
     return LayoutBuilder(
       builder: (context, constraints) {
-        const thumbExtent = 48.0;
-        const thumbSpacing = 4.0;
-        // Mirror the row chrome below: horizontal padding (10+10), the
-        // 4px gap and one or two 28px trailing buttons.
-        final chrome = 20.0 + 4.0 + 28.0 + (canPasteAll ? 28.0 : 0.0);
+        // Mirror the row chrome below: horizontal padding (6+6), the
+        // 4px gap and one or two trailing buttons.
+        final chrome =
+            12.0 +
+            4.0 +
+            trailingButtonExtent +
+            (canPasteAll ? trailingButtonExtent : 0.0);
         final wrapWidth = constraints.maxWidth - chrome;
         final columns = math.max(
           1,
@@ -166,9 +166,7 @@ class _ImageSetTileState extends State<ImageSetTile> with AdoptableTileFocus {
         // Boundary: let the list-level directional traversal take over so
         // Up from the top row exits to the tile above, Down from the bottom
         // row exits to the tile below — mirrors single-tile behavior.
-        primary.focusInDirection(
-          delta < 0 ? TraversalDirection.up : TraversalDirection.down,
-        );
+        primary.focusInDirection(delta < 0 ? .up : .down);
       }
     }
 
@@ -233,18 +231,18 @@ class _ImageSetTileState extends State<ImageSetTile> with AdoptableTileFocus {
             focusByRowOffset(-columns),
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: .center,
           children: [
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: .start,
+                mainAxisSize: .min,
                 children: [
                   Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
+                    spacing: thumbSpacing,
+                    runSpacing: thumbSpacing,
                     children: [
                       for (var i = 0; i < bytesList.length; i++)
                         _Thumbnail(
@@ -257,7 +255,7 @@ class _ImageSetTileState extends State<ImageSetTile> with AdoptableTileFocus {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Padding(
                     padding: const EdgeInsets.only(left: 2),
                     child: Text(
@@ -265,7 +263,7 @@ class _ImageSetTileState extends State<ImageSetTile> with AdoptableTileFocus {
                       '${formatEntryTime(widget.entry.createdAt)}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.hintColor,
-                        fontSize: 11,
+                        fontSize: 9.5,
                       ),
                     ),
                   ),
@@ -276,20 +274,14 @@ class _ImageSetTileState extends State<ImageSetTile> with AdoptableTileFocus {
             if (canPasteAll)
               IconButton(
                 focusNode: _pasteAllFocus,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.content_paste_go, size: 16),
+                icon: const Icon(Icons.content_paste_go, size: 13),
                 tooltip: 'Hepsini yapıştır',
                 onPressed: widget.onPasteAll,
                 style: trailingIconStyle(scheme, scheme.primary),
               ),
             IconButton(
               focusNode: _deleteFocus,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.close, size: 16),
+              icon: const Icon(Icons.close, size: 13),
               tooltip: 'Sil',
               onPressed: widget.onDelete,
               style: trailingIconStyle(scheme, scheme.error),
@@ -301,16 +293,14 @@ class _ImageSetTileState extends State<ImageSetTile> with AdoptableTileFocus {
   }
 }
 
-class _Thumbnail extends StatelessWidget {
-  const _Thumbnail({
-    required this.bytes,
-    required this.index,
-    required this.count,
-    required this.focusNode,
-    required this.onActivate,
-    this.autofocus = false,
-  });
-
+class const _Thumbnail({
+  required this.bytes,
+  required this.index,
+  required this.count,
+  required this.focusNode,
+  required this.onActivate,
+  this.autofocus = false,
+}) extends StatelessWidget {
   final Uint8List bytes;
 
   /// Position within the imageSet — feeds the semantic label so a screen
@@ -357,35 +347,31 @@ class _Thumbnail extends StatelessWidget {
                 cursor: SystemMouseCursors.click,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 80),
-                  width: 48,
-                  height: 48,
+                  width: thumbExtent,
+                  height: thumbExtent,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(5),
                     border: Border.all(
                       color: focused ? scheme.primary : Colors.transparent,
-                      width: 2,
+                      width: 1.5,
                     ),
                   ),
                   padding: const EdgeInsets.all(1),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(3),
                     child: Image.memory(
                       bytes,
-                      fit: BoxFit.cover,
+                      fit: .cover,
                       gaplessPlayback: true,
                       // The Semantics wrapper above is the announced node.
                       excludeFromSemantics: true,
-                      // Decode at thumbnail scale — a 5MB Retina screenshot
-                      // would otherwise pin a ~20MB full-resolution RGBA
-                      // bitmap in the image cache to paint a 48px square.
-                      // Height only: specifying both dimensions would decode
-                      // to a distorted square instead of letting cover crop.
-                      cacheHeight: (48 * MediaQuery.devicePixelRatioOf(context))
-                          .round(),
+                      cacheHeight:
+                          (thumbExtent * MediaQuery.devicePixelRatioOf(context))
+                              .round(),
                       errorBuilder: (ctx, _, _) => ColoredBox(
-                        color: Theme.of(
-                          ctx,
-                        ).colorScheme.surfaceContainerHighest,
+                        color: Theme.of(ctx)
+                            .colorScheme
+                            .surfaceContainerHighest,
                       ),
                     ),
                   ),

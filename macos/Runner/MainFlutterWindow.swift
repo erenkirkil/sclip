@@ -48,6 +48,17 @@ class MainFlutterWindow: NSWindow {
     // clipboard-manager expectation (Maccy, Paste) is overlay.
     self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
+    // macOS 27 (Liquid Glass): NSTitlebarView no longer paints its own
+    // opaque material backing when .fullSizeContentView is absent; if
+    // window_manager sets isOpaque = false + backgroundColor = .clear, the
+    // 28pt strip hosting the traffic lights turns completely invisible.
+    // Keep the window opaque and blend the titlebar into the sRGB surface
+    // color synced from Flutter's active theme.
+    self.isOpaque = true
+    self.titlebarAppearsTransparent = true
+    self.titleVisibility = .hidden
+    self.backgroundColor = NSColor.windowBackgroundColor
+
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     let clipboardChannel = FlutterMethodChannel(
@@ -83,10 +94,24 @@ class MainFlutterWindow: NSWindow {
         let hasFilePromise = types.contains { promiseTypes.contains($0.rawValue) }
         let hasFileUrl = types.contains { $0.rawValue == "public.file-url" }
         let hasFiles = hasFilePromise || hasFileUrl
+        // Session lock, read on the same probe so no extra channel, no
+        // extra framework and no CMake/link change is needed —
+        // CoreGraphics is already in the picture (pasteToPrevious posts
+        // CGEvents). The key is absent while the session is unlocked, so a
+        // missing key means "unlocked"; a nil dictionary (no GUI session)
+        // means the same. Both defaults fail *open* — worst case sclip
+        // just never clears, which is the non-destructive direction.
+        // Read as NSNumber: the value arrives as a CFBoolean today but has
+        // shown up as a CFNumber on some releases, and boolValue absorbs
+        // both without a second cast.
+        let sessionInfo = CGSessionCopyCurrentDictionary() as? [String: Any]
+        let lockedNumber = sessionInfo?["CGSSessionScreenIsLocked"] as? NSNumber
+        let locked = lockedNumber?.boolValue ?? false
         result([
           "change": change,
           "sensitive": sensitive,
           "hasFiles": hasFiles,
+          "locked": locked,
         ])
       case "readFiles":
         // Resolves a "files-on-clipboard" payload into a flat list of paths
@@ -234,13 +259,48 @@ class MainFlutterWindow: NSWindow {
       name: "sclip/window",
       binaryMessenger: flutterViewController.engine.binaryMessenger
     )
-    channel.setMethodCallHandler { call, result in
+    channel.setMethodCallHandler { [weak self] call, result in
       switch call.method {
       case "hideAndDeactivate":
+        // orderOut ensures window.isVisible flips to false immediately;
         // NSApp.hide(nil) hides all our windows and hands focus back to the
         // next running app, so the user's previous context (e.g. editor) stays
         // active after dismissing sclip.
+        self?.orderOut(nil)
         NSApp.hide(nil)
+        result(nil)
+      case "showAndActivate":
+        // Single atomic IPC for showing and focusing on macOS. Avoids two
+        // sequential window_manager calls (show + focus) and ensures an
+        // unfocused background window (when autoHideOnBlur is off) is brought
+        // to the front via ignoringOtherApps + orderFrontRegardless().
+        NSApp.unhide(nil)
+        NSRunningApplication.current.activate(
+          options: [.activateAllWindows, .activateIgnoringOtherApps]
+        )
+        NSApp.activate(ignoringOtherApps: true)
+        if let window = self {
+          window.setIsVisible(true)
+          window.makeKeyAndOrderFront(nil)
+          window.orderFrontRegardless()
+        }
+        result(nil)
+      case "syncTheme":
+        if let window = self,
+           let args = call.arguments as? [String: Any] {
+          let isDark = (args["isDark"] as? Bool) ?? false
+          window.isOpaque = true
+          window.titlebarAppearsTransparent = true
+          window.titleVisibility = .hidden
+          window.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
+          if let argb = args["argb"] as? Int {
+            let r = CGFloat((argb >> 16) & 0xFF) / 255.0
+            let g = CGFloat((argb >> 8) & 0xFF) / 255.0
+            let b = CGFloat(argb & 0xFF) / 255.0
+            window.backgroundColor = NSColor(srgbRed: r, green: g, blue: b, alpha: 1.0)
+          }
+          window.invalidateShadow()
+        }
         result(nil)
       case "screenLayout":
         // Returns cursor + every visible display in a single, consistent
@@ -305,6 +365,7 @@ class MainFlutterWindow: NSWindow {
         // behaviour, slightly less safe but never silently aborts.
         let targetPid = capturedFrontmostPid
         capturedFrontmostPid = nil
+        self?.orderOut(nil)
         NSApp.hide(nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
           if let expected = targetPid {

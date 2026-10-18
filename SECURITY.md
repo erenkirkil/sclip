@@ -12,9 +12,10 @@ sclip is designed to be safer than cloud-backed clipboard managers by keeping cl
 - Malicious clipboard content (e.g. SVG XXE, billion-laughs entity expansion)
 - Keystroke injection race condition (paste sent to wrong window)
 - Accidental disk persistence of clipboard history
+- **Live process-memory reads** by another unprivileged process running as the same user. In scope but **not mitigable** on Windows, and blocked on macOS only for the notarised, hardened-runtime build — see Risk 7 in [`docs/security.md`](docs/security.md)
 
 **Out of scope:**
-- Attacker with kernel/disk/RAM-dump access (swap file, memory forensics) — this attacker already owns the machine
+- Kernel-level access, or offline access to the disk — swap file, hibernation image, memory forensics on a powered-off machine. That attacker already owns the machine
 - Apps that bypass `ConcealedType` / `ExcludeClipboardContentFromMonitoring` by not setting the flag (OS protocol limit, not a sclip bug)
 - OCR-based "is this a password?" heuristics (false-positive rate is unacceptably high)
 
@@ -32,4 +33,9 @@ When the user selects an item in sclip, sclip hides itself and injects Cmd+V (ma
 See [`docs/security.md`](docs/security.md) for the full trade-off analysis.
 
 ### RAM-only guarantee
-History is stored as a `List<ClipboardEntry>` in process heap. It is never written to disk, a database, or a network endpoint. When the process exits the history is gone. Swap-file recovery by an attacker with disk access is theoretically possible but is out of scope — that attacker controls the entire machine.
+History is stored as a `List<ClipboardEntry>` in process heap. It is never written to a database or a network endpoint, and it is never persisted to disk — the single exception being the short-lived temp file needed to paste SVG/PDF/image-sets into file-handler targets, cleaned per entry on eviction, on quit, and on next launch. When the process exits the history is gone.
+
+Two memory-level limits follow from that, and neither can be fixed inside the app:
+
+- **Offline recovery — out of scope.** With disk access, swap or hibernation images may still hold heap pages. macOS encrypts swap by default; on Windows this needs BitLocker.
+- **Live reads by a same-user process — in scope, not mitigable.** On Windows, any unprivileged process running as you can `OpenProcess(PROCESS_VM_READ)` + `ReadProcessMemory` against sclip: that is how process objects are ACLed by default and no application can opt out. On macOS the notarised build's hardened runtime blocks `task_for_pid` for non-root debuggers, but a locally built `.app` is not hardened. Full analysis: Risk 7 in [`docs/security.md`](docs/security.md).

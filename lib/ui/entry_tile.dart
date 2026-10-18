@@ -9,20 +9,18 @@ import 'entry_tiles/standard_tile.dart';
 /// `entry_tiles/` with their own state (focus nodes, grid navigation) —
 /// keeping them separate means a 30-entry text history no longer allocates
 /// imageSet-only state per tile.
-class ClipboardEntryTile extends StatelessWidget {
-  const ClipboardEntryTile({
-    super.key,
-    required this.entry,
-    required this.onTap,
-    required this.onDelete,
-    this.onTapPlain,
-    this.onOpen,
-    this.onImageTap,
-    this.onPasteAll,
-    this.autofocus = false,
-    this.focusNode,
-  });
-
+class const ClipboardEntryTile({
+  super.key,
+  required this.entry,
+  required this.onTap,
+  required this.onDelete,
+  this.onTapPlain,
+  this.onOpen,
+  this.onImageTap,
+  this.onPasteAll,
+  this.autofocus = false,
+  this.focusNode,
+}) extends StatelessWidget {
   final ClipboardEntry entry;
   final VoidCallback onTap;
 
@@ -46,7 +44,7 @@ class ClipboardEntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (entry.type == ClipboardEntryType.imageSet) {
+    if (entry.type == .imageSet) {
       return ImageSetTile(
         entry: entry,
         onDelete: onDelete,

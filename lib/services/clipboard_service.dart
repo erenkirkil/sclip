@@ -24,26 +24,35 @@ typedef FilesReader = Future<List<String>> Function();
 
 /// Snapshot returned by the native `currentState` channel: a monotonic
 /// change counter (macOS NSPasteboard.changeCount / Windows
-/// GetClipboardSequenceNumber), a sensitive-content flag, and a hasFiles
+/// GetClipboardSequenceNumber), a sensitive-content flag, a hasFiles
 /// flag that flips on for any "files-on-clipboard" payload (NSURL or
-/// NSFilePromise on macOS, CF_HDROP on Windows). When hasFiles is set the
+/// NSFilePromise on macOS, CF_HDROP on Windows), and a locked flag
+/// carrying the OS session-lock state. When hasFiles is set the
 /// Dart side dispatches `readFiles` on the native channel instead of
 /// running super_clipboard, which would either fail to read the payload
 /// or, on macOS, destructively resolve a promise. A missing native
 /// handler is expressed as [ClipboardState.unavailable].
 @immutable
-class ClipboardState {
-  const ClipboardState({
-    required this.change,
-    required this.sensitive,
-    this.hasFiles = false,
-  });
-
+class const ClipboardState({
+  required this.change,
+  required this.sensitive,
+  this.hasFiles = false,
+  this.locked = false,
+}) {
   static const unavailable = ClipboardState(change: -1, sensitive: false);
 
   final int change;
   final bool sensitive;
   final bool hasFiles;
+
+  /// True while the OS session is locked — macOS reports it through
+  /// `CGSessionCopyCurrentDictionary()["CGSSessionScreenIsLocked"]`,
+  /// Windows through a failing `OpenInputDesktop()`. It rides the existing
+  /// 500 ms probe rather than a dedicated event channel, so there is no new
+  /// channel, no new native dependency and no CMake/link change. The flag
+  /// is a *level*: it stays true for the whole lock, so a consumer that
+  /// wants a one-shot has to detect the transition itself.
+  final bool locked;
 }
 
 typedef ClipboardStateProbe = Future<ClipboardState> Function();
@@ -53,14 +62,13 @@ typedef ClipboardStateProbe = Future<ClipboardState> Function();
 /// materialization in [ClipboardTempStore]; SVG defenses in SvgSanitizer.
 class ClipboardService {
   ClipboardService({
-    Duration interval = const Duration(milliseconds: 500),
+    this._interval = const Duration(milliseconds: 500),
     this.sensitiveFilterEnabled = true,
     ClipboardReaderFactory? readerFactory,
     ClipboardEntryReader? entryReader,
     ClipboardStateProbe? stateProbe,
     FilesReader? filesReader,
-  }) : _interval = interval,
-       _readerFactory = readerFactory ?? _defaultReader,
+  }) : _readerFactory = readerFactory ?? _defaultReader,
        _entryReaderOverride = entryReader,
        _stateProbe = stateProbe ?? _defaultStateProbe,
        _filesReader = filesReader ?? _defaultFilesReader;
@@ -93,6 +101,8 @@ class ClipboardService {
   final FilesReader _filesReader;
   final StreamController<ClipboardEntry> _controller =
       StreamController<ClipboardEntry>.broadcast();
+  final StreamController<void> _lockController =
+      StreamController<void>.broadcast();
 
   Timer? _timer;
 
@@ -109,7 +119,18 @@ class ClipboardService {
   bool _ticking = false;
   bool _primed = false;
 
+  /// Last observed value of [ClipboardState.locked]. Only the false→true
+  /// transition is published on [screenLocks]; the flag itself stays true
+  /// for the entire lock.
+  bool _screenLocked = false;
+
   Stream<ClipboardEntry> get entries => _controller.stream;
+
+  /// Fires once per unlocked→locked transition seen by the poll loop. The
+  /// level→edge conversion lives here so every consumer gets identical
+  /// "first locked tick wins" semantics instead of each re-deriving it.
+  Stream<void> get screenLocks => _lockController.stream;
+
   bool get isRunning => _timer != null;
 
   /// Rewrites the OS clipboard with [entry]'s content. For
@@ -379,6 +400,7 @@ class ClipboardService {
         change: (v['change'] as int?) ?? -1,
         sensitive: (v['sensitive'] as bool?) ?? false,
         hasFiles: (v['hasFiles'] as bool?) ?? false,
+        locked: (v['locked'] as bool?) ?? false,
       );
     } on MissingPluginException {
       return ClipboardState.unavailable;
@@ -426,10 +448,22 @@ class ClipboardService {
   Future<void> dispose() async {
     stop();
     await _controller.close();
+    await _lockController.close();
     // Sweep materialized temp files on graceful shutdown — without this,
     // pasted SVG/PDF/imageSet content would sit on disk until the NEXT
     // launch's start() prune.
     await ClipboardTempStore.pruneAll();
+  }
+
+  /// Clears the dedup fingerprint and re-enters the pre-prime baseline
+  /// state, identical to [start]. Called when the user clears history so a
+  /// subsequent copy of a previously-seen payload is accepted again, while
+  /// whatever is still sitting on the OS clipboard right now is absorbed as
+  /// the new baseline on the next tick instead of immediately re-populating
+  /// the just-cleared list.
+  void resetBaseline() {
+    _lastSignature = null;
+    _primed = false;
   }
 
   /// Deletes the per-entry temp directory created by writeBack
@@ -451,6 +485,17 @@ class ClipboardService {
       // the clipboard hasn't been touched since our last tick, so we skip
       // all work (no IPC to super_clipboard, no decoding, no allocations).
       final state = await _stateProbe();
+
+      // Step 1a — session lock edge. Deliberately read BEFORE the change
+      // counter short-circuit below: a locked screen is precisely when the
+      // clipboard stops moving, so a check placed after it would never
+      // run. Edge, not level — subscribers act on the transition into the
+      // lock, not once per tick for the lock's whole duration.
+      if (state.locked != _screenLocked) {
+        _screenLocked = state.locked;
+        if (state.locked) _lockController.add(null);
+      }
+
       final previousChange = _lastChange;
       if (state.change != -1) {
         if (state.change == _lastChange) return;

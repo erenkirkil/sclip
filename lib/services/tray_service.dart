@@ -6,15 +6,13 @@ import 'package:tray_manager/tray_manager.dart';
 
 typedef TrayCallback = Future<void> Function();
 
-class TrayService with TrayListener {
-  TrayService({
-    required this.onToggleWindow,
-    required this.onClearAll,
-    required this.onTogglePin,
-    required this.onOpenSettings,
-    required this.onQuit,
-  });
-
+class TrayService({
+  required this.onToggleWindow,
+  required this.onClearAll,
+  required this.onTogglePin,
+  required this.onOpenSettings,
+  required this.onQuit,
+}) {
   final TrayCallback onToggleWindow;
   final TrayCallback onClearAll;
   final TrayCallback onTogglePin;
@@ -24,53 +22,116 @@ class TrayService with TrayListener {
   static const _iconMac = 'assets/tray/icon.png';
   static const _iconWin = 'assets/tray/icon.ico';
 
+  TrayIcon? _trayIcon;
+  Image? _icon;
+  Menu? _menu;
+  MenuItem? _pinItem;
+  final List<(MenuItem, ListenerId)> _itemListeners = [];
+  ListenerId? _trayListenerId;
+
   bool _installed = false;
   bool _pinned = false;
 
   Future<void> init() async {
     if (_installed) return;
-    _installed = true;
 
-    trayManager.addListener(this);
+    final trayIcon = TrayIcon.create();
+    if (trayIcon == null) {
+      debugPrint('sclip: unable to create native tray icon');
+      return;
+    }
 
     final iconPath = Platform.isWindows ? _iconWin : _iconMac;
-    await trayManager.setIcon(iconPath, isTemplate: Platform.isMacOS);
-    await trayManager.setToolTip('sclip');
-    await _rebuildMenu();
+    final icon = ImageAsset.fromAsset(iconPath) ?? Image.fromFile(iconPath);
+    if (icon != null) {
+      trayIcon
+        ..isIconTemplate = Platform.isMacOS
+        ..icon = icon;
+      _icon = icon;
+    }
+
+    trayIcon.setTooltip('sclip');
+    _trayIcon = trayIcon;
+    _installed = true;
+
+    _buildMenu(trayIcon);
+    _trayListenerId = trayIcon.addListener(_onTrayEvent);
+    trayIcon.setVisible(true);
   }
 
   Future<void> setPinned(bool value) async {
     if (_pinned == value) return;
     _pinned = value;
-    await _rebuildMenu();
+    _pinItem?.state = _pinnedState;
   }
 
-  Future<void> _rebuildMenu() async {
-    await trayManager.setContextMenu(
-      Menu(
-        items: [
-          MenuItem(key: 'toggle', label: 'Göster / Gizle'),
-          MenuItem.separator(),
-          MenuItem.checkbox(
-            key: 'pin',
-            label: 'Üste sabitle',
-            checked: _pinned,
-          ),
-          MenuItem.separator(),
-          MenuItem(key: 'clear', label: 'Hepsini Sil'),
-          MenuItem.separator(),
-          MenuItem(key: 'settings', label: 'Ayarlar…'),
-          MenuItem.separator(),
-          MenuItem(key: 'quit', label: 'Çıkış'),
-        ],
-      ),
-    );
+  MenuItemState get _pinnedState => _pinned ? .checked : .unchecked;
+
+  void _buildMenu(TrayIcon trayIcon) {
+    final menu = Menu.create();
+    if (menu == null) return;
+
+    void addAction(
+      String label,
+      TrayCallback cb, {
+      MenuItemType type = .normal,
+      bool isPinItem = false,
+    }) {
+      final item = MenuItem.createWithLabelAndType(label, type);
+      if (item == null) return;
+      if (isPinItem) {
+        item.state = _pinnedState;
+        _pinItem = item;
+      }
+      final listenerId = item.addListener((event) {
+        if (event is! MenuItemClickedEvent) return;
+        _dispatch(cb);
+        // Native platforms may auto-toggle a checkbox item on click;
+        // enforce our controlled state until setPinned updates it.
+        if (isPinItem) {
+          item.state = _pinnedState;
+        }
+      });
+      _itemListeners.add((item, listenerId));
+      menu.addItem(item);
+    }
+
+    addAction('Göster / Gizle', onToggleWindow);
+    menu.addSeparator();
+    addAction('Üste sabitle', onTogglePin, type: .checkbox, isPinItem: true);
+    menu.addSeparator();
+    addAction('Hepsini Sil', onClearAll);
+    menu.addSeparator();
+    addAction('Ayarlar…', onOpenSettings);
+    menu.addSeparator();
+    addAction('Çıkış', onQuit);
+
+    trayIcon.setContextMenu(menu);
+    _menu = menu;
   }
 
   Future<void> dispose() async {
     if (!_installed) return;
-    trayManager.removeListener(this);
-    await trayManager.destroy();
+    final trayIcon = _trayIcon;
+    final trayListenerId = _trayListenerId;
+    if (trayIcon != null && trayListenerId != null) {
+      trayIcon.removeListener(trayListenerId);
+    }
+    _trayListenerId = null;
+
+    for (final (item, listenerId) in _itemListeners) {
+      item.removeListener(listenerId);
+      item.dispose();
+    }
+    _itemListeners.clear();
+    _pinItem = null;
+
+    _menu?.dispose();
+    _menu = null;
+    _icon?.dispose();
+    _icon = null;
+    trayIcon?.dispose();
+    _trayIcon = null;
     _installed = false;
   }
 
@@ -85,33 +146,17 @@ class TrayService with TrayListener {
     );
   }
 
-  @override
-  void onTrayIconMouseDown() {
-    _dispatch(onToggleWindow);
-  }
-
-  @override
-  void onTrayIconRightMouseDown() {
-    unawaited(trayManager.popUpContextMenu());
-  }
-
-  @override
-  void onTrayMenuItemClick(MenuItem menuItem) {
-    switch (menuItem.key) {
-      case 'toggle':
-        _dispatch(onToggleWindow);
-        break;
-      case 'pin':
-        _dispatch(onTogglePin);
-        break;
-      case 'clear':
-        _dispatch(onClearAll);
-        break;
-      case 'settings':
-        _dispatch(onOpenSettings);
-        break;
-      case 'quit':
-        _dispatch(onQuit);
+  void _onTrayEvent(TrayIconEvent event) {
+    switch (event) {
+      case TrayIconClickedEvent():
+        if (Platform.isMacOS) {
+          _trayIcon?.openContextMenu();
+        } else {
+          _dispatch(onToggleWindow);
+        }
+      case TrayIconRightClickedEvent():
+        _trayIcon?.openContextMenu();
+      case TrayIconDoubleClickedEvent():
         break;
     }
   }

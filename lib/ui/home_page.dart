@@ -11,29 +11,47 @@ import '../models/clipboard_entry.dart';
 import '../providers/history_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/clipboard_service.dart';
+import '../services/entry_filter.dart';
 import '../services/hotkey_service.dart';
 import '../services/tray_service.dart';
 import '../services/window_positioner.dart';
 import 'accessibility_banner.dart';
 import 'history_list.dart';
+import 'search_bar.dart';
 import 'settings_page.dart';
-import 'settings_window_geometry.dart';
 
-class HomePage extends StatefulWidget {
-  const HomePage({
-    super.key,
-    required this.settings,
-    required this.navigatorKey,
-  });
-
+class const HomePage({
+  super.key,
+  required this.settings,
+  required this.navigatorKey,
+}) extends StatefulWidget {
   final SettingsProvider settings;
   final GlobalKey<NavigatorState> navigatorKey;
 
+  /// Confirmation body for "Hepsini sil". Split out from the dialog so
+  /// the filter-aware wording is unit-testable without booting a window:
+  /// HomePage owns its HistoryProvider internally, so a widget test can't
+  /// seed a history to drive this through the UI.
+  ///
+  /// Deleting only what the filter shows was rejected: HistoryProvider's
+  /// removeAt path fires onEvict per entry (temp-file cleanup), and a
+  /// partial "clear" whose scope depends on invisible query state is a
+  /// worse contract than one sentence of honesty.
+  @visibleForTesting
+  static String clearAllMessage({required int total, required int visible}) {
+    if (visible == total) {
+      return 'Tüm pano geçmişi silinecek. Emin misin?';
+    }
+    return 'Filtre aktif: görünen $visible değil, tümü ($total) silinecek. '
+        'Emin misin?';
+  }
+
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<HomePage> createState() => HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with WindowListener {
+@visibleForTesting
+class HomePageState extends State<HomePage> with WindowListener {
   static const _windowChannel = MethodChannel('sclip/window');
   static const _clipboardChannel = MethodChannel('sclip/clipboard');
 
@@ -42,13 +60,26 @@ class _HomePageState extends State<HomePage> with WindowListener {
   late final TrayService _tray;
   late final HotkeyService _hotkey;
   final FocusNode _firstItemFocus = FocusNode(debugLabel: 'sclip-first-item');
-  StreamSubscription<ClipboardEntry>? _sub;
-  Timer? _blurHideTimer;
+  final FocusNode _searchFocus = FocusNode(debugLabel: 'sclip-search');
+  final TextEditingController _searchController = TextEditingController();
 
-  /// True once we've confirmed macOS Accessibility is granted (or we're on a
-  /// platform where it doesn't apply). While false on macOS, the paste-to-
-  /// previous path silently fails, so we surface a one-time banner.
-  bool _accessibilityOk = !Platform.isMacOS;
+  /// True while the query bar is mounted. It lives in this Column, above
+  /// HistoryList and outside its subtree — see HistorySearchBar's doc for
+  /// why that placement is load-bearing rather than cosmetic.
+  bool _searchOpen = false;
+
+  /// Live query text. Empty means "no filter".
+  String _query = '';
+
+  StreamSubscription<ClipboardEntry>? _sub;
+  StreamSubscription<void>? _lockSub;
+  Timer? _blurHideTimer;
+  Timer? _accessibilityPollTimer;
+
+  /// Optimistically true on first frame so the red banner never flashes at
+  /// launch when Accessibility is already granted; [_checkAccessibility] flips
+  /// it to false if macOS reports untrusted and polls until granted.
+  bool _accessibilityOk = true;
 
   /// False when no global toggle hotkey could be registered at launch —
   /// the plugin masks per-combo failures, so this is the only signal the
@@ -59,6 +90,13 @@ class _HomePageState extends State<HomePage> with WindowListener {
   /// Initial value mirrors the user's `alwaysOnTopDefault` preference but
   /// can be toggled at runtime from the tray without rewriting the pref.
   late bool _pinned;
+
+  /// Tracks whether the window currently owns OS focus. When `autoHideOnBlur`
+  /// is off and the user clicks outside, the window stays `isVisible == true`
+  /// while losing focus (`_windowFocused == false`); the next tray "Göster /
+  /// Gizle" or hotkey press should bring it back to the front instead of
+  /// hiding an unfocused background window.
+  bool _windowFocused = true;
 
   /// True while we're programmatically hiding the window, so our own
   /// show→hide bounce doesn't fire the blur-auto-hide path.
@@ -74,6 +112,13 @@ class _HomePageState extends State<HomePage> with WindowListener {
   /// dialogs on top of each other, forcing the user to Esc repeatedly to
   /// unwind the pile.
   bool _settingsOpen = false;
+
+  /// Set when the screen-lock trigger wiped the history. The clear happens
+  /// behind a locked screen where a SnackBar draws into a hidden window
+  /// and a semantics announcement reaches nobody, so a persistent banner
+  /// on the next display is the only honest way to tell the user their
+  /// history is gone on purpose rather than through a bug.
+  bool _lockClearedNotice = false;
 
   @override
   void initState() {
@@ -94,16 +139,18 @@ class _HomePageState extends State<HomePage> with WindowListener {
     _history.onEvict = (e) => unawaited(_service.cleanupEntryTempFiles(e));
 
     _sub = _service.entries.listen(_history.add);
+    _lockSub = _service.screenLocks.listen((_) => _onScreenLocked());
     _service.start();
 
     // Honour clearOnStartup before the first tick lands anything — the
     // service hasn't produced entries yet, but a user who toggles this on
     // expects a blank list at launch even if a prior session left entries
-    // in the (now-gone) heap of a previous process. The clear() is
-    // effectively a no-op today; we keep it explicit so the intent is
-    // preserved when session-restore lands in a future sprint.
+    // in the (now-gone) heap of a previous process. Routed through
+    // _clearHistory so this path picks up the imageCache sweep and the
+    // dedup-baseline reset too; calling _history.clear() directly skipped
+    // both.
     if (widget.settings.clearOnStartup) {
-      _history.clear();
+      _clearHistory();
     }
 
     // Apply alwaysOnTopDefault to the window itself on launch.
@@ -148,6 +195,39 @@ class _HomePageState extends State<HomePage> with WindowListener {
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
   }
 
+  int? _lastSyncedSurfaceArgb;
+  Brightness? _lastSyncedBrightness;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final surfaceArgb =
+        (theme.appBarTheme.backgroundColor ?? theme.colorScheme.surface)
+            .toARGB32();
+    if (_lastSyncedBrightness == brightness &&
+        _lastSyncedSurfaceArgb == surfaceArgb) {
+      return;
+    }
+    _lastSyncedBrightness = brightness;
+    _lastSyncedSurfaceArgb = surfaceArgb;
+    if (Platform.isMacOS) {
+      unawaited(
+        _windowChannel
+            .invokeMethod<void>('syncTheme', {
+              'isDark': brightness == Brightness.dark,
+              'argb': surfaceArgb,
+            })
+            .catchError((Object _) {}),
+      );
+    } else if (Platform.isWindows) {
+      unawaited(
+        windowManager.setBrightness(brightness).catchError((Object _) {}),
+      );
+    }
+  }
+
   void _onSettingsChanged() {
     final s = widget.settings;
     // Propagate the observable knobs to services. These setters all
@@ -172,14 +252,20 @@ class _HomePageState extends State<HomePage> with WindowListener {
   bool _onHardwareKey(KeyEvent event) {
     if (event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.escape) {
-      // If any modal/dialog is on top, pop it first. We no longer hide the
-      // window itself via Esc — users rely on the global hotkey to toggle.
+      // 1. If any modal/dialog/route is on top, pop it first.
       final nav = widget.navigatorKey.currentState;
       if (nav != null && nav.canPop()) {
         nav.pop();
         return true;
       }
-      return false;
+      // 2. If the search bar is open, close it and return focus to the list.
+      if (_searchOpen) {
+        _closeSearch();
+        return true;
+      }
+      // 3. Otherwise hide the panel and return focus to the previous app.
+      unawaited(_hideAndReturnFocus());
+      return true;
     }
     return false;
   }
@@ -192,6 +278,18 @@ class _HomePageState extends State<HomePage> with WindowListener {
       );
       if (!mounted) return;
       final ok = trusted ?? false;
+      if (ok) {
+        _accessibilityPollTimer?.cancel();
+        _accessibilityPollTimer = null;
+      } else {
+        // Poll every second while untrusted so the red banner disappears the
+        // instant the user flips the switch in System Settings (or as soon as
+        // tccd propagates a newly-granted permission on launch).
+        _accessibilityPollTimer ??= Timer.periodic(
+          const Duration(seconds: 1),
+          (_) => unawaited(_checkAccessibility()),
+        );
+      }
       if (!ok && _accessibilityOk) {
         // The banner appearing is invisible to a screen-reader user — the
         // audience most affected by broken auto-paste. Announce once on
@@ -200,11 +298,13 @@ class _HomePageState extends State<HomePage> with WindowListener {
           SemanticsService.sendAnnouncement(
             View.of(context),
             'Otomatik yapıştırma için Accessibility izni gerek.',
-            TextDirection.ltr,
+            .ltr,
           ),
         );
       }
-      setState(() => _accessibilityOk = ok);
+      if (_accessibilityOk != ok) {
+        setState(() => _accessibilityOk = ok);
+      }
     } on PlatformException catch (e) {
       debugPrint('sclip: accessibility probe failed: $e');
     } on MissingPluginException {
@@ -215,17 +315,41 @@ class _HomePageState extends State<HomePage> with WindowListener {
   @override
   void dispose() {
     _blurHideTimer?.cancel();
+    _accessibilityPollTimer?.cancel();
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     windowManager.removeListener(this);
     widget.settings.removeListener(_onSettingsChanged);
     unawaited(_sub?.cancel());
+    unawaited(_lockSub?.cancel());
     unawaited(_service.dispose());
     _history.dispose();
     unawaited(_tray.dispose());
     unawaited(_hotkey.dispose());
     _firstItemFocus.dispose();
+    _searchFocus.dispose();
+    _searchController.dispose();
     super.dispose();
   }
+
+  Future<void> _showAndFocusWindow() async {
+    if (Platform.isMacOS) {
+      try {
+        await _windowChannel.invokeMethod<void>('showAndActivate');
+        _windowFocused = true;
+        return;
+      } on MissingPluginException {
+        // Fall back to window_manager in tests / older runner.
+      } catch (e) {
+        debugPrint('sclip: showAndActivate failed: $e');
+      }
+    }
+    await windowManager.show();
+    await windowManager.focus();
+    _windowFocused = true;
+  }
+
+  @visibleForTesting
+  Future<void> debugToggleWindow() => _toggleWindow();
 
   Future<void> _toggleWindow() async {
     // If a blur event just happened (e.g. from clicking the tray icon),
@@ -235,10 +359,12 @@ class _HomePageState extends State<HomePage> with WindowListener {
     _blurHideTimer?.cancel();
 
     final visible = await windowManager.isVisible();
-    // We intentionally ignore isFocused: if the window is on screen at all
-    // (e.g. opened via tray click and now lives in the background), pressing
-    // the hotkey should hide it rather than fight its focus state.
-    if (visible && !wasBlurPending) {
+    final focused = _windowFocused && await windowManager.isFocused();
+    // When autoHideOnBlur is off and the user clicks outside, `visible` stays
+    // true while the window drops behind other apps (`focused == false`).
+    // Clicking "Göster / Gizle" in the tray menu (or pressing the hotkey) in
+    // that state must bring the window to the front rather than hiding it.
+    if (visible && !wasBlurPending && (focused || _pinned)) {
       await _hideAndReturnFocus();
     } else {
       // Remember who currently owns the foreground so the native paste
@@ -255,16 +381,22 @@ class _HomePageState extends State<HomePage> with WindowListener {
       } catch (e) {
         debugPrint('sclip: captureForeground failed: $e');
       }
-      await _positionNearCursor();
-      await windowManager.show();
-      await windowManager.focus();
-      // Re-check Accessibility on every show so the banner disappears the
-      // moment the user grants permission, without requiring an app restart.
+      // Re-check Accessibility when showing so the banner updates if the user
+      // just granted permission in System Settings.
       unawaited(_checkAccessibility());
+      await _positionNearCursor();
+      await _showAndFocusWindow();
       // Give the compositor a frame to settle, then park focus on the first
       // entry so a single Enter activates it (autofocus only fires on mount
       // and the widget tree is preserved across hide/show).
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // An explicit user-driven show with the bar open should land in
+        // the field, not on the first entry.
+        if (_searchOpen) {
+          _searchFocus.requestFocus();
+          return;
+        }
         if (_firstItemFocus.context != null) {
           _firstItemFocus.requestFocus();
         }
@@ -273,6 +405,12 @@ class _HomePageState extends State<HomePage> with WindowListener {
   }
 
   Future<void> _hideAndReturnFocus() async {
+    // Every hide path funnels through here (hotkey toggle, blur auto-hide,
+    // minimize, close, URL open, Esc). Dropping the query here is what makes
+    // "hide, then show again" start from the full history.
+    _resetSearchQuery();
+    _windowFocused = false;
+
     // Hide instantly visually to keep UI snappy
     if (Platform.isWindows) await windowManager.setOpacity(0.0);
 
@@ -322,34 +460,96 @@ class _HomePageState extends State<HomePage> with WindowListener {
     }
   }
 
-  Future<void> _openSettings() async {
-    // Re-entry while the modal is already on screen would stack another
-    // copy on top — Tray clicks don't know the app's UI state. Just bring
-    // focus back and bail.
-    if (_settingsOpen) {
-      await windowManager.show();
-      await windowManager.focus();
-      return;
+  /// Cmd/Ctrl+F and the AppBar's search button. Focus is requested in a
+  /// post-frame callback rather than via `autofocus:` on the field: the
+  /// first tile also autofocuses, and two autofocus requests racing inside
+  /// one frame resolve in FocusManager's arbitrary order.
+  void _openSearch() {
+    if (!_searchOpen) {
+      setState(() => _searchOpen = true);
     }
-    // Settings is shown from a hotkey/tray click, so the window might not
-    // currently be visible. Surface it first so the modal has a frame.
-    final visible = await windowManager.isVisible();
-    if (!visible) {
-      await windowManager.show();
-      await windowManager.focus();
-    }
-    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _searchFocus.requestFocus();
+      // Re-pressing the shortcut mid-search should let the user retype
+      // instead of appending to what's already there.
+      _searchController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _searchController.text.length,
+      );
+    });
+  }
 
-    // Grow the window for the modal's lifetime; the returned closure
-    // conditionally restores the footprint (see SettingsWindowGeometry).
-    final restoreGeometry = await SettingsWindowGeometry.grow(_windowChannel);
+  /// Esc / the bar's X: drop the query, unmount the bar, hand the keyboard
+  /// back to the list so arrow navigation resumes immediately.
+  void _closeSearch() {
+    if (!_searchOpen) return;
+    _searchController.clear();
+    setState(() {
+      _searchOpen = false;
+      _query = '';
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _focusList();
+    });
+  }
+
+  /// Parks focus on the first *visible* entry. HistoryList hands
+  /// [_firstItemFocus] to index 0 of the filtered list, so this lands on
+  /// the first search result, not on the first entry of the raw history.
+  /// No-op when nothing is rendered (empty history, zero results) — the
+  /// node has no context to attach to then.
+  void _focusList() {
+    if (_firstItemFocus.context != null) {
+      _firstItemFocus.requestFocus();
+    }
+  }
+
+  void _focusSearchField() {
+    if (!_searchOpen) return;
+    _searchFocus.requestFocus();
+  }
+
+  /// Enter in the query field: activate the first result. Same path as
+  /// tapping the top tile, so writeBack + touch + hide all behave
+  /// identically.
+  void _submitSearch() {
+    final results = filterEntries(_history.entries, _query);
+    if (results.isEmpty) return;
+    unawaited(_onEntryTap(results.first));
+  }
+
+  /// Drops the query on every hide. The bar itself deliberately stays
+  /// open: a user who reopens with the hotkey mid-search expects to land
+  /// back in the field, just with a clean slate. Closing the bar is Esc's
+  /// job, not the window's.
+  void _resetSearchQuery() {
+    if (_query.isEmpty && _searchController.text.isEmpty) return;
+    _searchController.clear();
     if (!mounted) {
-      await restoreGeometry();
+      _query = '';
       return;
     }
+    setState(() => _query = '');
+  }
 
+  Future<void> _openSettings() async {
+    // Re-entry while the settings page is already on screen would stack
+    // another copy on top — Tray clicks don't know the app's UI state.
+    // Lock _settingsOpen up front before any await so rapid double-triggers
+    // can't slip through the isVisible/show/focus window.
+    if (_settingsOpen) {
+      await _showAndFocusWindow();
+      return;
+    }
     _settingsOpen = true;
     try {
+      // Settings is shown from a hotkey/tray click, so the window might not
+      // currently be visible or might be sitting unfocused behind another app.
+      await _showAndFocusWindow();
+      if (!mounted) return;
+
       await SettingsPage.show(
         context,
         settings: widget.settings,
@@ -363,7 +563,6 @@ class _HomePageState extends State<HomePage> with WindowListener {
       );
     } finally {
       _settingsOpen = false;
-      await restoreGeometry();
     }
   }
 
@@ -401,11 +600,16 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   Future<void> _confirmClearAll(BuildContext context) async {
     final scheme = Theme.of(context).colorScheme;
+    final total = _history.length;
+    final visible = filterEntries(_history.entries, _query).length;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Geçmişi sil'),
-        content: const Text('Tüm pano geçmişi silinecek. Emin misin?'),
+        title: const Text('Geçmişi sil', style: TextStyle(fontSize: 13)),
+        content: Text(
+          HomePage.clearAllMessage(total: total, visible: visible),
+          style: const TextStyle(fontSize: 11.5),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -427,12 +631,46 @@ class _HomePageState extends State<HomePage> with WindowListener {
     }
   }
 
-  /// Clears the history and drops the decoded bitmaps Flutter's image
-  /// cache retained for the thumbnails — "clear history" should actually
-  /// release the memory, not just the raw bytes.
+  /// Edge-triggered by [ClipboardService.screenLocks]: fires once per
+  /// unlocked→locked transition, so an hour-long lock clears the history
+  /// exactly once instead of on every 500 ms tick.
+  ///
+  /// Two things are deliberately left alone:
+  ///
+  ///   * **The OS clipboard.** The last copied item stays on it, so
+  ///     Cmd/Ctrl+V keeps working the moment the user unlocks. Emptying it
+  ///     would break the user's own workflow, not an attacker's.
+  ///   * **The materialized temp files.** The clipboard may still
+  ///     reference them by file URI (that is exactly what the guard in
+  ///     ClipboardService.cleanupEntryTempFiles exists for) — sweeping
+  ///     them would turn the first paste after unlock into an empty one.
+  ///
+  /// Together those two limits make this a RAM cleanup, not a privacy
+  /// guarantee; docs/security.md says so in the same words.
+  void _onScreenLocked() {
+    if (!widget.settings.clearOnScreenLock) return;
+    if (_history.isEmpty) return;
+    _clearHistory();
+    if (mounted) setState(() => _lockClearedNotice = true);
+  }
+
+  /// The single clear path: startup (clearOnStartup), tray "Hepsini Sil",
+  /// the confirm dialog and the screen-lock trigger all land here. Drops
+  /// the decoded bitmaps Flutter's image cache retained for the thumbnails
+  /// — "clear history" should actually release the memory, not just the
+  /// raw bytes — and resets the service's dedup baseline so re-copying
+  /// something that was just deleted isn't silently swallowed.
   void _clearHistory() {
     _history.clear();
+    // Görev 3 / B-01: the dedup baseline still fingerprinted the history
+    // we just dropped. Do not remove this line.
+    _service.resetBaseline();
     PaintingBinding.instance.imageCache.clear();
+    // An emptied history under a live query would render "'x' için sonuç
+    // yok" instead of the real "history is empty" state. Dropping the
+    // query keeps the empty state honest on both the AppBar path and the
+    // tray's unconfirmed "Hepsini Sil".
+    _resetSearchQuery();
   }
 
   Future<void> _quit() async {
@@ -448,7 +686,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
     final uri = entry.uris?.firstOrNull;
     if (uri == null) return;
     await _hideAndReturnFocus();
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    await launchUrl(uri, mode: .externalApplication);
   }
 
   Future<void> _onEntryTap(
@@ -465,6 +703,11 @@ class _HomePageState extends State<HomePage> with WindowListener {
     // timestamp — touch() keeps the id stable so widget keys don't churn
     // and the "just now" label reflects the latest action.
     _history.touch(entry.id);
+    // The native paste path below hides the window via `pasteToPrevious`
+    // and never reaches _hideAndReturnFocus, so the query has to be
+    // dropped here too.
+    _resetSearchQuery();
+    _windowFocused = false;
 
     if (Platform.isWindows) {
       // Hide instantly visually to keep UI snappy
@@ -513,7 +756,9 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   @override
   void onWindowFocus() {
+    _windowFocused = true;
     unawaited(HardwareKeyboard.instance.syncKeyboardState());
+    unawaited(_checkAccessibility());
 
     // Reassert focus on the top entry — when the window is reshown after a
     // paste, OS focus sometimes arrives before our postFrameCallback from
@@ -522,6 +767,10 @@ class _HomePageState extends State<HomePage> with WindowListener {
     // guarantees arrow keys have a primary focus to navigate from.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // Unlike _toggleWindow this fires on shows we didn't initiate (OS
+      // unhide, alt-tab back). Stealing focus out of a field the user is
+      // typing in would eat keystrokes, so bail unconditionally.
+      if (_searchOpen) return;
       if (_firstItemFocus.context != null &&
           FocusManager.instance.primaryFocus != _firstItemFocus) {
         _firstItemFocus.requestFocus();
@@ -531,6 +780,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   @override
   void onWindowBlur() {
+    _windowFocused = false;
     // Auto-hide when user clicks away — unless the user has pinned the
     // window or turned the behaviour off entirely in settings.
     // _suppressBlur guards against our own hide path, which also fires
@@ -559,12 +809,17 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    const actionConstraints = BoxConstraints(minWidth: 24, minHeight: 24);
     return Shortcuts(
       shortcuts: <ShortcutActivator, Intent>{
         const SingleActivator(LogicalKeyboardKey.comma, meta: true):
             const _OpenSettingsIntent(),
         const SingleActivator(LogicalKeyboardKey.comma, control: true):
             const _OpenSettingsIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyF, meta: true):
+            const _OpenSearchIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+            const _OpenSearchIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -574,24 +829,43 @@ class _HomePageState extends State<HomePage> with WindowListener {
               return null;
             },
           ),
+          _OpenSearchIntent: CallbackAction<_OpenSearchIntent>(
+            onInvoke: (_) {
+              _openSearch();
+              return null;
+            },
+          ),
         },
         child: Scaffold(
           appBar: AppBar(
-            toolbarHeight: 40,
-            titleSpacing: 8,
+            toolbarHeight: 28,
+            titleSpacing: 4,
             title: Image.asset(
               'assets/branding/logo.png',
-              height: 22,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.medium,
+              height: 14,
+              cacheHeight: (14 * MediaQuery.devicePixelRatioOf(context))
+                  .round(),
+              fit: .contain,
+              filterQuality: .medium,
               semanticLabel: 'sclip',
             ),
             centerTitle: true,
             actions: [
+              IconButton(
+                tooltip: 'Ara',
+                iconSize: 15,
+                padding: .zero,
+                constraints: actionConstraints,
+                icon: const Icon(Icons.search),
+                onPressed: _openSearch,
+              ),
               ListenableBuilder(
                 listenable: _history,
                 builder: (context, _) => IconButton(
                   tooltip: 'Hepsini sil',
+                  iconSize: 15,
+                  padding: .zero,
+                  constraints: actionConstraints,
                   icon: const Icon(Icons.delete_sweep_outlined),
                   onPressed: _history.isEmpty
                       ? null
@@ -600,9 +874,13 @@ class _HomePageState extends State<HomePage> with WindowListener {
               ),
               IconButton(
                 tooltip: 'Ayarlar',
+                iconSize: 15,
+                padding: .zero,
+                constraints: actionConstraints,
                 icon: const Icon(Icons.settings_outlined),
                 onPressed: _openSettings,
               ),
+              const SizedBox(width: 2),
             ],
           ),
           body: Column(
@@ -616,12 +894,31 @@ class _HomePageState extends State<HomePage> with WindowListener {
                   actionLabel: 'Ayarlar\'dan değiştir',
                   onTap: _openSettings,
                 ),
+              // Görev 21 / Faz 4 — ekran kilidi geri bildirimi. Do not drop.
+              if (_lockClearedNotice)
+                WarningBanner(
+                  icon: Icons.lock_clock_outlined,
+                  message: 'Ekran kilidinde geçmiş temizlendi',
+                  actionLabel: 'Tamam',
+                  onTap: () => setState(() => _lockClearedNotice = false),
+                ),
+              if (_searchOpen)
+                HistorySearchBar(
+                  controller: _searchController,
+                  focusNode: _searchFocus,
+                  onChanged: (value) => setState(() => _query = value),
+                  onSubmit: _submitSearch,
+                  onClose: _closeSearch,
+                  onDownToList: _focusList,
+                ),
               Expanded(
                 child: HistoryList(
                   provider: _history,
+                  query: _query,
                   onEntryTap: _onEntryTap,
                   onEntryOpen: _onEntryOpen,
                   firstItemFocusNode: _firstItemFocus,
+                  onArrowUpAtTop: _searchOpen ? _focusSearchField : null,
                 ),
               ),
             ],
@@ -632,6 +929,6 @@ class _HomePageState extends State<HomePage> with WindowListener {
   }
 }
 
-class _OpenSettingsIntent extends Intent {
-  const _OpenSettingsIntent();
-}
+class const _OpenSettingsIntent() extends Intent;
+
+class const _OpenSearchIntent() extends Intent;

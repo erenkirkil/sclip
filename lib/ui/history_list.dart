@@ -6,17 +6,18 @@ import 'package:flutter/services.dart';
 
 import '../models/clipboard_entry.dart';
 import '../providers/history_provider.dart';
+import '../services/entry_filter.dart';
 import 'entry_tile.dart';
 
-class HistoryList extends StatefulWidget {
-  const HistoryList({
-    super.key,
-    required this.provider,
-    required this.onEntryTap,
-    required this.onEntryOpen,
-    this.firstItemFocusNode,
-  });
-
+class const HistoryList({
+  super.key,
+  required this.provider,
+  required this.onEntryTap,
+  required this.onEntryOpen,
+  this.firstItemFocusNode,
+  this.query = '',
+  this.onArrowUpAtTop,
+}) extends StatefulWidget {
   final HistoryProvider provider;
   final Future<void> Function(
     ClipboardEntry entry, {
@@ -26,6 +27,17 @@ class HistoryList extends StatefulWidget {
   onEntryTap;
   final Future<void> Function(ClipboardEntry entry) onEntryOpen;
   final FocusNode? firstItemFocusNode;
+
+  /// Live search query. Applied through [filterEntries], a pure function:
+  /// HistoryProvider's own list is never mutated, so the `onEvict` →
+  /// temp-file-deletion side effect on removeAt/clear stays untouched.
+  final String query;
+
+  /// Invoked instead of directional traversal when ArrowUp is pressed
+  /// while the *first* tile holds focus. HomePage passes a non-null
+  /// callback only while the query bar is open; when it's null the old
+  /// behaviour survives and ArrowUp climbs to the AppBar buttons.
+  final VoidCallback? onArrowUpAtTop;
 
   @override
   State<HistoryList> createState() => _HistoryListState();
@@ -64,7 +76,7 @@ class _HistoryListState extends State<HistoryList> {
       SemanticsService.sendAnnouncement(
         View.of(context),
         'Silindi: ${e.preview}',
-        TextDirection.ltr,
+        .ltr,
       ),
     );
   }
@@ -74,78 +86,107 @@ class _HistoryListState extends State<HistoryList> {
     return ListenableBuilder(
       listenable: widget.provider,
       builder: (context, _) {
-        if (widget.provider.isEmpty) {
-          return const Center(
+        final entries = filterEntries(widget.provider.entries, widget.query);
+        if (entries.isEmpty) {
+          // A live query that matches nothing is a different situation
+          // from an empty history: "bir şey kopyala" would tell a user
+          // with 30 entries to go copy something.
+          final trimmed = widget.query.trim();
+          return Center(
             child: Padding(
-              padding: EdgeInsets.all(24),
+              padding: const EdgeInsets.all(12),
               child: Text(
-                'Henüz içerik yok — bir şey kopyala',
-                textAlign: TextAlign.center,
+                trimmed.isEmpty
+                    ? 'Henüz içerik yok — bir şey kopyala'
+                    : "'$trimmed' için sonuç yok",
+                textAlign: .center,
+                style: const TextStyle(fontSize: 11.5),
               ),
             ),
           );
         }
-        final entries = widget.provider.entries;
         // Arrow keys are not part of the default Flutter traversal map — wire
         // them to directional focus so the list behaves like any native list.
         return CallbackShortcuts(
           bindings: {
             const SingleActivator(LogicalKeyboardKey.arrowDown): () {
-              FocusManager.instance.primaryFocus?.focusInDirection(
-                TraversalDirection.down,
-              );
+              FocusManager.instance.primaryFocus?.focusInDirection(.down);
             },
             const SingleActivator(LogicalKeyboardKey.arrowUp): () {
-              FocusManager.instance.primaryFocus?.focusInDirection(
-                TraversalDirection.up,
-              );
+              final primary = FocusManager.instance.primaryFocus;
+              final onAtTop = widget.onArrowUpAtTop;
+              if (onAtTop != null &&
+                  widget.firstItemFocusNode != null &&
+                  primary == widget.firstItemFocusNode) {
+                onAtTop();
+                return;
+              }
+              primary?.focusInDirection(.up);
             },
             const SingleActivator(LogicalKeyboardKey.arrowRight): () {
-              FocusManager.instance.primaryFocus?.focusInDirection(
-                TraversalDirection.right,
-              );
+              FocusManager.instance.primaryFocus?.focusInDirection(.right);
             },
             const SingleActivator(LogicalKeyboardKey.arrowLeft): () {
-              FocusManager.instance.primaryFocus?.focusInDirection(
-                TraversalDirection.left,
-              );
+              FocusManager.instance.primaryFocus?.focusInDirection(.left);
             },
           },
-          child: ListView.separated(
-            itemCount: entries.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (context, i) {
-              final e = entries[i];
-              return RepaintBoundary(
-                child: CallbackShortcuts(
-                  bindings: {
-                    const SingleActivator(LogicalKeyboardKey.delete): () =>
-                        _delete(e),
-                    const SingleActivator(LogicalKeyboardKey.backspace): () =>
-                        _delete(e),
-                  },
-                  child: ClipboardEntryTile(
+          child: Builder(
+            builder: (context) {
+              final indexById = <String, int>{
+                for (var i = 0; i < entries.length; i++) entries[i].id: i,
+              };
+              return ListView.separated(
+                itemCount: entries.length,
+                // Without this the delegate can't recognise a child that
+                // moved: every keystroke of a live query re-inflates the
+                // visible tiles, throwing away ImageSetTile's
+                // _extraThumbFocuses / _originatingThumb and with them the
+                // user's place in the grid (audit B-09). Note this is
+                // findItemIndexCallback, not the deprecated
+                // findChildIndexCallback — the latter wants child indices
+                // (separators included) and warns on 3.44.8.
+                findItemIndexCallback: (key) {
+                  if (key is! ValueKey<String>) return null;
+                  return indexById[key.value];
+                },
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (context, i) {
+                  final e = entries[i];
+                  return RepaintBoundary(
                     key: ValueKey(e.id),
-                    entry: e,
-                    autofocus: i == 0,
-                    focusNode: i == 0 ? widget.firstItemFocusNode : null,
-                    onTap: () => widget.onEntryTap(e),
-                    // Shift+tık / Shift+Enter: düz metin olarak yapıştır.
-                    onTapPlain: (e.text?.isNotEmpty ?? false)
-                        ? () => widget.onEntryTap(e, plainOnly: true)
-                        : null,
-                    onImageTap: e.type == ClipboardEntryType.imageSet
-                        ? (index) => widget.onEntryTap(e, imageIndex: index)
-                        : null,
-                    onPasteAll: e.type == ClipboardEntryType.imageSet
-                        ? () => widget.onEntryTap(e)
-                        : null,
-                    onOpen: e.type == ClipboardEntryType.url
-                        ? () => widget.onEntryOpen(e)
-                        : null,
-                    onDelete: () => _delete(e),
-                  ),
-                ),
+                    child: CallbackShortcuts(
+                      bindings: {
+                        const SingleActivator(LogicalKeyboardKey.delete): () =>
+                            _delete(e),
+                        const SingleActivator(
+                          LogicalKeyboardKey.backspace,
+                        ): () =>
+                            _delete(e),
+                      },
+                      child: ClipboardEntryTile(
+                        key: ValueKey(e.id),
+                        entry: e,
+                        autofocus: i == 0,
+                        focusNode: i == 0 ? widget.firstItemFocusNode : null,
+                        onTap: () => widget.onEntryTap(e),
+                        // Shift+tık / Shift+Enter: düz metin olarak yapıştır.
+                        onTapPlain: (e.text?.isNotEmpty ?? false)
+                            ? () => widget.onEntryTap(e, plainOnly: true)
+                            : null,
+                        onImageTap: e.type == .imageSet
+                            ? (index) => widget.onEntryTap(e, imageIndex: index)
+                            : null,
+                        onPasteAll: e.type == .imageSet
+                            ? () => widget.onEntryTap(e)
+                            : null,
+                        onOpen: e.type == .url
+                            ? () => widget.onEntryOpen(e)
+                            : null,
+                        onDelete: () => _delete(e),
+                      ),
+                    ),
+                  );
+                },
               );
             },
           ),
