@@ -6,55 +6,42 @@ on:
   pull_request:
     branches: [main, test, "v*"]
 
-jobs:
-  analyze-and-test:
-    name: Analyze & Test
-    runs-on: macos-latest
+permissions:
+  contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS (Swift)
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Analyze
-        run: flutter analyze --fatal-warnings
-
-      - name: Test
-        run: flutter test
-
-      - name: Check entitlement & hardened-runtime gates
+      # Package needs Swift 6 tools; pick the newest non-beta Xcode on the image.
+      - name: Select Xcode
         run: |
-          ENT="macos/Runner/Release.entitlements"
-          DMG="scripts/make-dmg.sh"
-          if grep -q 'com.apple.security.network' "$ENT"; then
-            echo "ERROR: network entitlement found in Release.entitlements — offline guarantee broken"
-            exit 1
+          XCODE="$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -vi beta | sort -V | tail -1 || true)"
+          if [ -n "$XCODE" ]; then
+            echo "Using $XCODE"
+            sudo xcode-select -s "$XCODE"
+          else
+            echo "No versioned Xcode found; keeping image default"
           fi
-          if grep -q 'get-task-allow' "$ENT"; then
-            echo "ERROR: get-task-allow in Release.entitlements — hardened runtime would allow debugger attach (docs/security.md Risk 7)"
-            exit 1
-          fi
-          if grep -qE 'cs\.allow-jit|cs\.allow-unsigned-executable-memory|cs\.disable-library-validation' "$ENT"; then
-            echo "ERROR: hardened-runtime exemption in Release.entitlements (cs.allow-jit / cs.allow-unsigned-executable-memory / cs.disable-library-validation)"
-            exit 1
-          fi
-          # Comments stripped first — make-dmg.sh names the flag in a comment too.
-          if ! grep -v '^[[:space:]]*#' "$DMG" 2>/dev/null | grep -q -- '--options runtime'; then
-            echo "ERROR: scripts/make-dmg.sh no longer signs with --options runtime — the shipped .app would not be hardened"
-            exit 1
-          fi
-          echo "Entitlement + hardened-runtime gates: OK"
+          xcodebuild -version
+          swift --version
 
-      - name: Check forbidden patterns
-        run: |
-          if grep -rn 'HttpClient\|dart:io.*Socket' lib/; then
-            echo "ERROR: network-capable code found in lib/"
-            exit 1
-          fi
-          echo "Forbidden pattern check: OK"
+      - name: Verify
+        run: bash scripts/verify.sh
+
+  windows:
+    name: Windows (C++)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify
+        shell: pwsh
+        run: ./scripts/verify.ps1

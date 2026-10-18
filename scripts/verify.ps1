@@ -20,13 +20,27 @@ function Invoke-Step {
     Write-Host ""
 }
 
+# bash'i acikca coz: System32\bash.exe WSL baslaticisidir ve dagitim yoksa hata verir.
+function Resolve-GitBash {
+    $gitBash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
+    if (Test-Path -LiteralPath $gitBash) { return $gitBash }
+    $sys32 = Join-Path $env:SystemRoot 'System32'
+    $found = Get-Command bash -All -ErrorAction SilentlyContinue |
+        Where-Object { $_.Source -and -not $_.Source.StartsWith($sys32, [System.StringComparison]::OrdinalIgnoreCase) } |
+        Select-Object -First 1
+    if ($found) { return $found.Source }
+    throw 'Git Bash not found (install Git for Windows); System32\bash.exe is the WSL launcher and is not used.'
+}
+
 Write-Host "=== sclip verify (Windows) ==="
 Write-Host ""
 
 Invoke-Step 'cmake configure'  { cmake -S win -B win/build }
 Invoke-Step 'cmake build'      { cmake --build win/build --config Release }
 Invoke-Step 'ctest'            { ctest --test-dir win/build -C Release --output-on-failure }
-Invoke-Step 'check-limits'     { bash scripts/check-limits.sh }
+$Bash = Resolve-GitBash
+Write-Host "bash: $Bash"
+Invoke-Step 'check-limits'     { & $Bash scripts/check-limits.sh }
 
 Write-Host "================================"
 Write-Host "PASS"
