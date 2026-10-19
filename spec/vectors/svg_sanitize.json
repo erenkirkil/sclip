@@ -150,14 +150,15 @@
     "rule": "B-8.10.2"
   },
   {
-    "name": "invalid_utf8_no_nul_no_bom_safe",
+    "name": "invalid_utf8_rejected",
     "input": {
       "b64": "PHN2Z4CBww=="
     },
     "expect": {
-      "safe": true
+      "safe": false
     },
-    "source": "oracle",
+    "deviation": "S8.10",
+    "source": "manual",
     "rule": "B-8.10.5"
   },
   {
@@ -447,9 +448,170 @@
     "rule": "B-8.10.3"
   },
   {
-    "name": "prefixed_ns_href_not_matched",
+    "name": "declared_utf8_double_quoted_safe",
     "input": {
-      "utf8": "<svg><g ns1:href=\"https://x.example/\"/></svg>"
+      "utf8": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg/>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "declared_utf8_single_quoted_safe",
+    "input": {
+      "utf8": "<?xml version='1.0' encoding='utf-8'?><svg/>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "declared_us_ascii_safe",
+    "input": {
+      "utf8": "<?xml version=\"1.0\" encoding=\"US-ASCII\"?><svg/>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "xml_declaration_without_encoding_safe",
+    "input": {
+      "utf8": "<?xml version=\"1.0\"?><svg/>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "xml_stylesheet_pi_is_not_declaration_safe",
+    "input": {
+      "utf8": "<?xml-stylesheet href=\"#s\"?><svg/>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "whitespace_only_payload_safe",
+    "input": {
+      "utf8": " \n\t"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "bom_whitespace_then_svg_safe",
+    "input": {
+      "concat": [
+        {
+          "b64": "77u/"
+        },
+        {
+          "utf8": "\r\n\t <svg></svg>"
+        }
+      ]
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "valid_non_ascii_utf8_safe",
+    "input": {
+      "utf8": "<svg><text>çğış � 😀</text></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "xhref_not_matched",
+    "input": {
+      "utf8": "<svg><g xhref=\"https://x.example/\"/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "custom_ns_href_fragment_safe",
+    "input": {
+      "utf8": "<svg><image x:href=\"#a\"/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "prefixed_svg_elements_safe",
+    "input": {
+      "utf8": "<svg:svg xmlns:svg=\"http://www.w3.org/2000/svg\"><svg:rect/></svg:svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "css_url_fragment_forms_safe",
+    "input": {
+      "utf8": "<svg><rect fill=\"url(#g)\" style=\"fill:url( '#g' )\"/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "css_url_data_safe",
+    "input": {
+      "utf8": "<svg><rect style=\"fill:url(data:image/png;base64,AA==)\"/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "event_handler_accepted_risk",
+    "input": {
+      "utf8": "<svg onload=\"alert(1)\"><rect/></svg>"
+    },
+    "expect": {
+      "safe": true
+    },
+    "source": "oracle",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "real_href_after_fragment_safe",
+    "input": {
+      "utf8": "<svg><g title=\"a\"/><use href=\"#a\"/><use href=\"#b\"/></svg>"
     },
     "expect": {
       "safe": true
@@ -605,6 +767,364 @@
     "name": "href_after_newline",
     "input": {
       "utf8": "<svg><use\nhref=\"https://x.example/\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "prefixed_ns_href_https",
+    "input": {
+      "utf8": "<svg><g ns1:href=\"https://x.example/\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "custom_ns_alias_href_https",
+    "input": {
+      "utf8": "<svg xmlns:x=\"http://www.w3.org/1999/xlink\"><image x:href=\"http://evil.example/\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_slash_separator",
+    "input": {
+      "utf8": "<svg><a/href=\"http://evil.example/\">x</a></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_quote_separator",
+    "input": {
+      "utf8": "<svg><a title=\"a\"href=\"http://evil.example/\">x</a></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_bypass_fake_in_comment",
+    "input": {
+      "utf8": "<svg><!-- <a href=\"#x --><image href=\"http://evil\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_bypass_fake_in_text",
+    "input": {
+      "utf8": "<svg><desc> href=\"#</desc><image href=\"http://evil\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_bypass_fake_in_attribute",
+    "input": {
+      "utf8": "<svg><g title=' href=\"#x'/><image href=\"http://evil\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_bypass_fake_unquoted",
+    "input": {
+      "utf8": "<svg><g a=href=#x b=1/><image href=\"http://evil\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "href_unterminated_quote",
+    "input": {
+      "utf8": "<svg><use href=\"#a"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "utf7_doctype_entity_payload",
+    "input": {
+      "utf8": "+ADw-!DOCTYPE svg [+ADw-!ENTITY x \"y\"+AD4-]+AD4-+ADw-svg/+AD4-"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "utf7_declared_href_payload",
+    "input": {
+      "utf8": "<?xml version=\"1.0\" encoding=\"UTF-7\"?>+ADw-svg+AD4-+ADw-image href+AD0-+ACI-http://evil+ACI-/+AD4-"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "utf7_script_no_declaration",
+    "input": {
+      "utf8": "+ADw-svg+AD4-+ADw-script+AD4-alert(1)+ADw-/script+AD4-"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "ebcdic_payload",
+    "input": {
+      "b64": "TKKlh25MYaKlh24="
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "declared_utf16_on_ascii_bytes",
+    "input": {
+      "utf8": "<?xml version=\"1.0\" encoding=\"UTF-16\"?><svg/>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "declared_iso_8859_1",
+    "input": {
+      "utf8": "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><svg/>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "declared_encoding_unquoted",
+    "input": {
+      "utf8": "<?xml version=\"1.0\" encoding=utf-7?><svg/>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "declared_unterminated_declaration",
+    "input": {
+      "utf8": "<?xml version=\"1.0\" encoding=\"utf-8\""
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "declared_fake_utf8_then_utf7",
+    "input": {
+      "utf8": "<?xml version=\"encoding='utf-8'\" encoding=\"utf-7\"?><svg/>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "leading_garbage_before_tag",
+    "input": {
+      "utf8": "x<svg/>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "leading_text_before_tag",
+    "input": {
+      "utf8": "abc <svg></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "ff_byte_before_href",
+    "input": {
+      "concat": [
+        {
+          "utf8": "<svg><use "
+        },
+        {
+          "b64": "/w=="
+        },
+        {
+          "utf8": "href=\"http://e\"/></svg>"
+        }
+      ]
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.5"
+  },
+  {
+    "name": "prefixed_script_tag",
+    "input": {
+      "utf8": "<svg:svg xmlns:svg=\"http://www.w3.org/2000/svg\"><svg:script>alert(1)</svg:script></svg:svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "prefixed_foreign_object_mixed_case",
+    "input": {
+      "utf8": "<svg><x:ForeignObject><div>x</div></x:ForeignObject></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "css_import_rule",
+    "input": {
+      "utf8": "<svg><style>@import 'https://evil.example/x.css';</style></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "css_url_http_attribute",
+    "input": {
+      "utf8": "<svg><rect fill=\"url(http://evil.example/g)\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "css_url_quoted_style",
+    "input": {
+      "utf8": "<svg><rect style=\"background:url('http://evil.example/')\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "css_url_double_quoted_spaced",
+    "input": {
+      "utf8": "<svg><rect style='fill:URL( \"http://evil.example/\" )'/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "css_url_empty",
+    "input": {
+      "utf8": "<svg><rect fill=\"url()\"/></svg>"
+    },
+    "expect": {
+      "safe": false
+    },
+    "deviation": "S8.10",
+    "source": "manual",
+    "rule": "B-8.10.3"
+  },
+  {
+    "name": "css_url_second_occurrence_external",
+    "input": {
+      "utf8": "<svg><rect fill=\"url(#a)\" stroke=\"url(http://evil.example/)\"/></svg>"
     },
     "expect": {
       "safe": false

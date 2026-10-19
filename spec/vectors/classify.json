@@ -3009,5 +3009,180 @@
     },
     "source": "manual",
     "rule": "B-8.8.7"
+  },
+  {
+    "name": "svg_markup_trailing_newline_keeps_raw",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "  <svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"4\"/></svg>\n"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "svg",
+      "preview": "SVG · 64B",
+      "hash": "s:0f98e230928d1c0f",
+      "text": "  <svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"4\"/></svg>\n"
+    },
+    "source": "manual",
+    "rule": "B-8.3.4"
+  },
+  {
+    "name": "rtf_gate_empty_plain_html_beats_png",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": ""
+            },
+            "text/rtf": {
+              "utf8": "{\\rtf1\\ansi Hello {\\b Word}}"
+            },
+            "text/html": {
+              "utf8": "<p>Merhaba <b>dünya</b></p>"
+            },
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "richText",
+      "preview": "Merhaba dünya",
+      "hash": "r:36f94b65a51fceb7",
+      "text": "Merhaba dünya",
+      "hasRtf": true
+    },
+    "source": "manual",
+    "rule": "B-8.3.1"
+  },
+  {
+    "name": "rtf_gate_open_with_empty_rtf",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": "x"
+            },
+            "text/rtf": {
+              "utf8": ""
+            },
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "x",
+      "hash": "t:e76563248618b95d",
+      "text": "x"
+    },
+    "source": "manual",
+    "rule": "B-8.3.1"
+  },
+  {
+    "name": "multi_images_none_fit_falls_to_mixed_text",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 26214327,
+                    "seed": 14
+                  }
+                }
+              ]
+            },
+            "text/plain": {
+              "utf8": "first"
+            }
+          }
+        },
+        {
+          "formats": {
+            "image/png": {
+              "concat": [
+                {
+                  "fixture": "fixtures/tiny.png"
+                },
+                {
+                  "gen": {
+                    "size": 26214327,
+                    "seed": 15
+                  }
+                }
+              ]
+            },
+            "text/plain": {
+              "utf8": "second"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "text",
+      "preview": "first",
+      "hash": "t:0ed1dd01600cfc1f",
+      "text": "first"
+    },
+    "deviation": "S8.6",
+    "source": "manual",
+    "rule": "B-8.3.7"
+  },
+  {
+    "name": "rich_doc_fallback_html_over_cap_to_image",
+    "input": {
+      "items": [
+        {
+          "formats": {
+            "text/plain": {
+              "utf8": ""
+            },
+            "text/rtf": {
+              "utf8": "{\\rtf1\\ansi Hello {\\b Word}}"
+            },
+            "text/html": {
+              "repeat": "h",
+              "count": 2097153
+            },
+            "image/png": {
+              "fixture": "fixtures/tiny.png"
+            }
+          }
+        }
+      ]
+    },
+    "expect": {
+      "result": "entry",
+      "kind": "image",
+      "preview": "PNG · 0KB",
+      "hash": "i:74:300491311ae033d8",
+      "imageCount": 1
+    },
+    "source": "manual",
+    "rule": "B-8.3.10"
   }
 ]

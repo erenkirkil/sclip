@@ -90,11 +90,12 @@ image/svg+xml application/pdf`. Bayraklar: `concealed transient`.
 
 - `drop` (B-8.3.3, B-8.3.10): tanınan içerik bir sınır yüzünden reddedildi ve başka öğe çıkmadı — düz metin ya da
   yalnız-HTML > 2 097 152 karakter, tek görsel > 25 MiB, hiçbir görselin sığmadığı çoklu görsel, PDF > 25 MiB, SVG
-  baytları > 20 MiB (başka öğe yoksa). Hepsi görsel yükte önce sınırı aşanlar çıkarılır (B-8.3.7). Karışık
+  baytları > 20 MiB (başka öğe yoksa). Hepsi görsel yükte önce sınırı aşanlar çıkarılır; hiçbiri kalmazsa karışık
+  yük kuralı uygulanır (B-8.3.7). Karışık
   çoklu öğede sınırı aşan öğe atlanır, sınır içindeki en zengin öğe seçilir; `drop` yalnız hiçbiri sığmazsa.
   `none`: hiçbir şey tanınmadı.
 - `text`: yapıştırılacak orijinal metin (E21) — text'te ham metin, url/color'da kırpılmış metin, svg'de
-  XML, richText'te düz metin. `uri` / `display` yalnız url'de. `imageCount` image'da 1, imageSet'te n.
+  XML (işaretleme yolunda kırpılmamış ham düz metin), richText'te düz metin. `uri` / `display` yalnız url'de. `imageCount` image'da 1, imageSet'te n.
   `hasRtf` yalnız richText'te.
 - `preview` `strings.tr.json` biçimleriyle üretilmiş son metindir.
 - `hash` files'ta verilmez (mutlak yola bağlı); 1 MiB'tan büyük bayt yükünde de verilmez (E35,

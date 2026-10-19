@@ -134,8 +134,8 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
   + "…" (E24). Sınır durumları Task 8 vektörleriyle kilitlenir.
 - **B-6.4.6** files önizlemesi: 0 dosya → `[preview.files.none]`; 1 dosya → basename; 2–3 dosya →
   `[preview.files.multi]` (`{names}` = basename'ler ", " ile); 3'ten fazla → ilk 3 ile `[preview.files.multi]` +
-  `[preview.files.more]` (`{k}` = kalan sayı). Basename: yolun son `/` ya da `\` sonrası; file URI'de çözülmüş yol. Ayırıcı yoksa ya da yol
-  ayırıcıyla bitiyorsa yolun tamamı gösterilir.
+  `[preview.files.more]` (`{k}` = kalan sayı). Basename: file URI'de çözülmüş yol alınır; sondaki `/` ve `\` ayırıcıları atılır, kalanın son `/` ya da `\`
+  sonrası gösterilir; atmadan sonra hiçbir şey kalmazsa (ör. kök `/`) yolun tamamı gösterilir (Flutter'daki fiili davranış: Finder klasörü "Dir" görünür).
 - **B-6.4.7** imageSet: 24 pt küçük resimler, 3 pt aralıklı sarmalanan ızgara; altbilgi `[image_set.footer]`
   (`{preview}` = imageSet önizlemesi, `{time}` = göreli zaman).
 - **B-6.4.8** Göreli zaman (`şimdi − oluşturulma`): < 60 sn (negatif dahil) `[time.now]`; < 60 dk `[time.minutes_ago]`;
@@ -341,7 +341,8 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 
 ## 8.3 Sınıflandırma öncelik zinciri
 
-- **B-8.3.1** RTF kapısı: düz metin **ve** RTF birlikteyse ilk geçişte ikili problar atlanır.
+- **B-8.3.1** RTF kapısı: düz metin **ve** RTF birlikteyse ilk geçişte ikili problar atlanır. "Birlikte" iki biçimin
+  de sunulması demektir; değerlerden biri ya da ikisi boş olsa da kapı açılır (Flutter `canProvide` ile aynı).
 - **B-8.3.2** İkili problar (kapı kapalıysa): png → jpeg → gif → webp (ilk dolu kazanır) → SVG baytları (sanitizer +
   UTF-8) → PDF. PDF yalnız düz metin yoksa ya da boş/boşluksa denenir (E34). Sınırı aşan PDF düşer, zincir devam eder.
   Görsel probu biçimin sihirli baytlarını doğrular; tutmayan (kesik başlık dahil) bir sonraki proba düşer (S8.3).
@@ -349,15 +350,16 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
   + 4 herhangi bayt + `WEBP` (12 bayt).
 - **B-8.3.3** Düz metin 2 097 152 karakteri (UTF-16 birimi) aşarsa öğe tamamen düşer (`drop`, textTooLarge).
 - **B-8.3.4** Boş olmayan düz metinde sıra: URL → renk → e-posta → telefon → SVG işaretlemesi (sanitizer'dan geçerek)
-  → HTML varsa, metinden farklıysa ve sınır içindeyse `richText` (RTF eşlikçisiyle) → `text`. Yalnız boşluktan oluşan
-  düz metin boş sayılmaz: `text` öğesi olur, önizlemesi boştur (Flutter ile aynı).
+  → HTML varsa, metinden farklıysa ve sınır içindeyse `richText` (RTF eşlikçisiyle) → `text`. SVG işaretlemesi
+  algılaması kırpılmış metne bakar; saklanan, sanitizer'dan geçen ve hash'lenen ham düz metindir (Flutter ile aynı).
+  Yalnız boşluktan oluşan düz metin boş sayılmaz: `text` öğesi olur, önizlemesi boştur (Flutter ile aynı).
 - **B-8.3.5** Yalnız HTML: etiketler `<[^>]*>` ile soyulur, boşluk sıkıştırılır; sonuç boş değilse düz metni bu olan
   `richText`.
 - **B-8.3.6** Zengin doküman geri dönüşü: kapı açıktı ve metin yolları boş çıktıysa ikili problar PDF dahil yeniden
   koşar.
 - **B-8.3.7** Çoklu öğe: hepsi görselse önce görsel sınırını (25 MiB) aşanlar çıkarılır; kalan ≥ 2 görselin toplamı
-  sınır içindeyse kalanlardan (sırayla) `imageSet`, değilse kalanların ilki `image`; hiçbiri kalmazsa `drop`. Karışık
-  öğelerde sınırlar içinde kalan en zengin tek öğe: image > svg > pdf > richText > url > color > text (eşitlikte ilk
+  sınır içindeyse kalanlardan (sırayla) `imageSet`, değilse kalanların ilki `image`; hiçbiri kalmazsa karışık öğe
+  kuralı uygulanır (öğelerin görsel dışı temsilleri aday olur), o da öğe üretmezse `drop`. Karışık öğelerde sınırlar içinde kalan en zengin tek öğe: image > svg > pdf > richText > url > color > text (eşitlikte ilk
   gelen). Sınırını aşan öğe (ör. 25 MiB üstü görsel) aday sayılmaz; aynı yükteki metin/richText'i düşürmez.
 - **B-8.3.8** Dosya yolları: uzantıların hepsi png / jpg / jpeg / gif / webp, her dosya 1 bayt – sınır arası ve toplam
   sınır içindeyse sırayla okunup `image` (1) / `imageSet` (≥ 2); aksi her durumda (başka uzantı, boyut, okuma
@@ -367,8 +369,10 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
   HTML yok sayılır. Her biçim okuması 10 sn zaman aşımlıdır.
 - **B-8.3.10** Sınır kaynaklı düşme (`drop`): (a) sınırını aşan öğeler atlanır ve sınır içinde kalan en zengin öğe
   seçilir (B-8.3.7); yalnız hiçbir öğe sınıra sığmıyorsa düşer (tek öğede görsel 25 MiB'ı aşarsa overCap image);
-  (b) hepsi görsel çoklu öğede hiçbir görsel sınıra sığmıyorsa düşer; (c) düz metni olmayan, yalnız HTML'li öğede
-  HTML metin sınırını aşarsa düşer (textTooLarge); (d) sınırı aşan PDF'ten sonra zincir başka öğe üretmezse düşer
+  (b) hepsi görsel çoklu öğede hiçbir görsel sınıra sığmıyor ve karışık öğe kuralı da öğe üretmiyorsa düşer;
+  (c) düz metni olmayan (ya da boş olan), yalnız HTML'li öğede HTML metin sınırını aşarsa düşer (textTooLarge); RTF
+  kapısı açıksa önce B-8.3.6 geri dönüşü koşar, düşme yalnız o da öğe üretmezse olur (Flutter ile aynı). Sınırı aşan
+  düz metin (B-8.3.3) ise geri dönüş koşmadan düşer; (d) sınırı aşan PDF'ten sonra zincir başka öğe üretmezse düşer
   (overCap pdf); (e) 20 MiB'ı aşan SVG baytları aday değildir, zincir devam eder; başka öğe çıkmazsa düşer
   (overCap svg). Hiçbir şey tanınmazsa sonuç `none`'dır.
 
@@ -462,17 +466,34 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 ## 8.10 SVG güvenliği
 
 - **B-8.10.1** 20 MiB üstü reddedilir.
-- **B-8.10.2** Yük UTF-8 (değiştirme karakterli) çözülüp küçük harfe çevrilir; `<!doctype`, `<!entity`, `<!attlist`,
-  `xmlns:xi=`, `xinclude` içeriyorsa reddedilir.
-- **B-8.10.3** Ek olarak `<script`, `<foreignobject` ve `#` ya da `data:` ile başlamayan `href` / `xlink:href` değerleri
-  reddedilir. Öznitelik adı tam `href` ya da `xlink:href` olmalı ve önünde XML boşluğu (U+0020, U+0009, U+000A,
-  U+000D) bulunmalı; yalnız `href` ile biten adlar (`data-href`, `ns:href`) eşleşmez. `=` çevresinde boşluk olabilir.
-  Değer tırnaklıysa (`"…"` / `'…'`) tırnak içi, tırnaksızsa boşluğa ya da `>`'ye kadar olan kısımdır. Değer yalnız XML
-  boşluklarından (U+0020, U+0009, U+000D, U+000A) kırpıldıktan sonra denetlenir (NBSP kırpılmaz); boş değer reddedilir.
+- **B-8.10.2** Yük katı UTF-8 olarak çözülür (geçersiz bir dizi varsa reddedilir, B-8.10.6) ve küçük harfe çevrilir
+  (yalnız ASCII A-Z); `<!doctype`, `<!entity`, `<!attlist`, `xmlns:xi=`, `xinclude` içeriyorsa reddedilir.
+- **B-8.10.3** Ek olarak aşağıdakiler reddedilir (küçük harfe çevrilmiş yükte, hepsi doğrusal zamanlı taramadır):
+  `<script`, `<foreignobject`, ad alanlı `<önek:script` / `<önek:foreignobject` (`<` ile ad sonu arasında `:` ve ardından
+  bu adlar), `@import`, ve `href` değeri ya da CSS `url(` hedefi `#` ya da `data:` ile başlamayanlar.
+  - `href` özniteliği: ad `href` ya da `<önek>:href` (`xlink:href`, özel takma adlı `x:href`); öncesinde ad karakteri
+    (harf, rakam, `_`, `-`, `.`, ASCII dışı) olmamalı, `:` ise önek sayılır; yani `<a/href=`, `"a"href=` eşleşir,
+    `data-href`, `xhref` eşleşmez. `=` çevresinde XML boşluğu (U+0020, U+0009, U+000A, U+000D) olabilir; `=` yoksa
+    öznitelik değildir. Değer tırnaklıysa (`"…"` / `'…'`) tırnak içi, tırnaksızsa boşluğa ya da `>`'ye kadar olan kısımdır;
+    kapanış tırnağı yoksa değer tırnakla başlar sayılır (reddedilir). Değer yalnız XML boşluklarından kırpıldıktan
+    sonra denetlenir (NBSP kırpılmaz); boş değer reddedilir.
+  - Her `href` geçişi bağımsız denetlenir: bir değerin (yorum, metin, başka öznitelik dahil) içinde görünen sahte
+    `href="` sonraki gerçek özniteliği yutamaz.
+  - CSS `url(`: `url(` sonrasında XML boşluğu, isteğe bağlı tek/çift tırnak ve yine XML boşluğu atlanır; kalan hedef
+    `#` ya da `data:` ile başlamıyorsa (boş dahil) reddedilir. `url(#g)`, `url('#g')`, `url(data:…)` güvenlidir.
+  - Kabul edilen risk: olay işleyici öznitelikleri (`onload=` vb.) ve `data:` içine gömülü SVG reddedilmez; render
+    betik çalıştırmaz ve ağa çıkmaz (B-8.10.4).
 - **B-8.10.4** Sanitizer hem `image/svg+xml` bayt yolunu hem düz metin `<svg>` işaretleme yolunu kapsar. Render her
   zaman sanitizer'dan sonra ve WebKit kullanılmadan yapılır.
 - **B-8.10.5** Herhangi bir NUL (0x00) baytı ya da UTF-16 BOM bayt dizisi (`FF FE`, `FE FF`) içeren yük reddedilir
   (UTF-32 BOM'ları NUL içerdiği için kapsanır). Baştaki UTF-8 BOM'u (`EF BB BF`) güvenlidir, reddedilmez. UTF-8 dışı kodlanmış SVG'nin B-8.10.2 taramasını atlatması böyle önlenir.
+- **B-8.10.6** UTF-8 dışı kodlamayla kaçış (UTF-7, EBCDIC, bildirilen başka kodlamalar) reddedilir: (a) geçersiz UTF-8
+  dizisi içeren yük reddedilir (U+FFFD'ye çözüp devam edilmez); (b) isteğe bağlı baştaki UTF-8 BOM'u ve XML boşluğunu
+  (U+0020, U+0009, U+000D, U+000A) atlayınca ilk bayt `<` olmalıdır (boş / yalnız boşluk yük işaretleme içermediğinden
+  güvenlidir); (c) ilk işaretleme `<?xml` + XML boşluğu ile başlayan bir XML bildirimiyse (`<?xml-stylesheet` gibi
+  işleme yönergeleri bildirim değildir) `?>` ile bitmeli ve içindeki her `encoding` sözcüğü `= "değer"` / `= 'değer'`
+  biçiminde, değeri büyük/küçük harf duyarsız `utf-8`, `us-ascii` ya da `ascii` olmalıdır; aksi hâlde (eksik tırnak,
+  kapanmamış bildirim, başka değer) reddedilir.
 
 ## 8.11 macOS sandbox ve izinler
 
@@ -493,14 +514,17 @@ Bu kuralların vektörleri `"deviation": "<kimlik>"` ile etiketlenir.
 - **E25** — Görsel sınırı 5 → 25 MiB; reddedilen görsel imzayı tüketmez (B-8.6.4).
 - **E34** — Boş/boşluk düz metinli, RTF'siz öğede PDF probu koşar (B-8.3.2).
 - **E35** — Bayt hash'i ilk+son 64 KiB yerine tam SHA-256 (B-8.1.6).
-- **§8.10 eki** (`S8.10`) — SVG sanitizer `<script`, `<foreignobject`, dış/boş/tırnaksız `href` değerlerini ve NUL /
-  UTF-16 BOM içeren yükü de reddeder (B-8.10.3, B-8.10.5).
+- **§8.10 eki** (`S8.10`) — SVG sanitizer `<script`, `<foreignobject` (ad alanlı olanlar dahil), `@import`, dış/boş/
+  tırnaksız `href` ve CSS `url(` hedeflerini (ad alanı önekli `x:href` dahil), NUL / UTF-16 BOM içeren yükü, geçersiz
+  UTF-8'i, `<` ile başlamayan yükü ve UTF-8 / ASCII dışı `encoding` bildirimini de reddeder (B-8.10.3, B-8.10.5,
+  B-8.10.6).
 - **S8.3** — Görsel probu sihirli baytları doğrular (PNG 8 bayt, JPEG `FF D8 FF`, GIF `GIF87a`/`GIF89a`, WebP
   `RIFF`…`WEBP`); kesik/yanlış başlıklı görsel bir sonraki proba düşer (B-8.3.2).
 - **S8.2** — URL sözdizimi Dart `Uri`'den değil kendi kuralımızdan: `^(https?|ftp)://.+` / `^mailto:.+`, hiçbir yerde
   boşluk yok, ASCII dışı serbest; `http://`, `https:`, `\r`/boşluk içeren metin url değildir (B-8.2.1).
 - **S8.6** — Sınıflandırıcı sınır/düşme anlamı: sınırı aşan öğe aday değildir, sınır içindeki en zengin öğe seçilir;
-  hiçbiri sığmazsa `drop` (aşırı büyük görsel, yalnız-HTML, SVG baytları dahil) (B-8.3.7, B-8.3.10).
+  hiçbiri sığmazsa `drop` (aşırı büyük görsel, yalnız-HTML, SVG baytları dahil). Hepsi görsel çoklu öğede hiçbir
+  görsel sığmazsa karışık öğe kuralına geçilir; Flutter ilk (aşırı büyük) görseli döndürürdü (B-8.3.7, B-8.3.10).
 - **Shift+Enter / Shift+tık** — Düz metin yapıştırma kısayolu kaldırıldı; yerine `alwaysPastePlainText` ayarı geldi
   (kullanıcı kararı 2026-10-18; B-6.2.9, B-6.3.1, B-6.6.16). svg için ham XML yapıştırma yolu da yoktur.
 - **Başlık çubuğu** — (macOS) başlık çubuğu temanın üst çubuk rengini izlemez, native görünümü izler (B-6.1.3).

@@ -730,13 +730,56 @@ class _S {
   final bool? safe;
 }
 
-/// Sözleşme sanitizer'ı (B-8.10.1–B-8.10.5): Flutter kuralları + S8.10 eki. Dart'tan bağımsız
-/// hesap; her svg vakası buna karşı da denetlenir.
+// `href` adı: öncesi ad karakteri değilse ya da `:` ise (B-8.10.3). Değer ayrıca `_hrefValue` ile okunur;
+// eşleşme sıfır genişlikli değer başlangıcında biter, böylece her geçiş bağımsız denetlenir.
 final RegExp _hrefRe = RegExp(
-  '[ \\t\\n\\r](?:xlink:)?href[ \\t\\n\\r]*=[ \\t\\n\\r]*'
-  '(?:"([^"]*)"|\'([^\']*)\'|([^ \\t\\n\\r>]*))',
+  '(?<![a-z0-9_.\\-:\\u0080-\\uffff])(?:[a-z0-9_.\\-:\\u0080-\\uffff]*:)?href'
+  '[ \\t\\n\\r]*=[ \\t\\n\\r]*',
+);
+final RegExp _prefixedActiveRe = RegExp(
+  '<[^ \\t\\n\\r/><]*:(?:script|foreignobject)',
+);
+final RegExp _cssUrlRe = RegExp('url\\([ \\t\\n\\r]*[\'"]?[ \\t\\n\\r]*');
+
+String _hrefValue(String body, int pos) {
+  final c = pos < body.length ? body[pos] : '';
+  if (c == '"' || c == "'") {
+    final end = body.indexOf(c, pos + 1);
+    // Kapanış tırnağı yoksa değer tırnakla başlar (reddedilir).
+    return end < 0 ? body.substring(pos) : body.substring(pos + 1, end);
+  }
+  var end = pos;
+  while (end < body.length && !' \t\n\r>'.contains(body[end])) {
+    end++;
+  }
+  return body.substring(pos, end);
+}
+
+final RegExp _xmlDeclRe = RegExp('^<\\?xml[ \\t\\n\\r]');
+final RegExp _encodingRe = RegExp(
+  'encoding[ \\t\\n\\r]*=[ \\t\\n\\r]*(?:"([^"]*)"|\'([^\']*)\')',
 );
 
+/// B-8.10.6: ilk bayt (BOM + XML boşluğundan sonra) `<`; XML bildirimi varsa encoding utf-8 / ascii.
+bool _contractEncodingSafe(String body) {
+  final m = _xmlDeclRe.firstMatch(body);
+  if (m == null) return true;
+  final end = body.indexOf('?>');
+  if (end < 0) return false;
+  final decl = body.substring(0, end);
+  if ('encoding'.allMatches(decl).length !=
+      _encodingRe.allMatches(decl).length) {
+    return false;
+  }
+  for (final e in _encodingRe.allMatches(decl)) {
+    final v = e.group(1) ?? e.group(2)!;
+    if (v != 'utf-8' && v != 'us-ascii' && v != 'ascii') return false;
+  }
+  return true;
+}
+
+/// Sözleşme sanitizer'ı (B-8.10.1–B-8.10.6): Flutter kuralları + S8.10 eki. Dart'tan bağımsız
+/// hesap; her svg vakası buna karşı da denetlenir.
 bool _contractSvgSafe(Uint8List b) {
   if (b.length > SvgSanitizer.maxSvgBytes) return false;
   if (b.contains(0)) return false;
@@ -746,7 +789,21 @@ bool _contractSvgSafe(Uint8List b) {
       return false;
     }
   }
-  final body = utf8.decode(b, allowMalformed: true).toLowerCase();
+  // B-8.10.6 (a)(b): katı UTF-8; BOM + XML boşluğundan sonra ilk bayt `<`.
+  var off = 0;
+  if (b.length >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF) off = 3;
+  while (off < b.length &&
+      (b[off] == 0x20 || b[off] == 0x09 || b[off] == 0x0D || b[off] == 0x0A)) {
+    off++;
+  }
+  if (off < b.length && b[off] != 0x3C) return false;
+  final String body;
+  try {
+    body = utf8.decode(b.sublist(off)).toLowerCase();
+  } on FormatException {
+    return false;
+  }
+  if (!_contractEncodingSafe(body)) return false;
   const banned = [
     '<!doctype',
     '<!entity',
@@ -755,10 +812,17 @@ bool _contractSvgSafe(Uint8List b) {
     'xinclude',
     '<script',
     '<foreignobject',
+    '@import',
   ];
   if (banned.any(body.contains)) return false;
+  if (_prefixedActiveRe.hasMatch(body)) return false;
+  for (final m in _cssUrlRe.allMatches(body)) {
+    if (!body.startsWith('#', m.end) && !body.startsWith('data:', m.end)) {
+      return false;
+    }
+  }
   for (final m in _hrefRe.allMatches(body)) {
-    final value = _xmlTrim(m.group(1) ?? m.group(2) ?? m.group(3) ?? '');
+    final value = _xmlTrim(_hrefValue(body, m.end));
     if (value.isEmpty) return false;
     if (!value.startsWith('#') && !value.startsWith('data:')) return false;
   }
@@ -849,8 +913,8 @@ List<J> _svg() {
       ]),
       xxe,
     ),
-    _S(
-      'invalid_utf8_no_nul_no_bom_safe',
+    unsafeBytes(
+      'invalid_utf8_rejected',
       _b64([0x3C, 0x73, 0x76, 0x67, 0x80, 0x81, 0xC3]),
       enc,
     ),
@@ -935,8 +999,56 @@ List<J> _svg() {
       '<svg><g data-href="https://x.example/"/></svg>',
     ),
     safe(
-      'prefixed_ns_href_not_matched',
-      '<svg><g ns1:href="https://x.example/"/></svg>',
+      'declared_utf8_double_quoted_safe',
+      '<?xml version="1.0" encoding="UTF-8"?><svg/>',
+    ),
+    safe(
+      'declared_utf8_single_quoted_safe',
+      "<?xml version='1.0' encoding='utf-8'?><svg/>",
+    ),
+    safe(
+      'declared_us_ascii_safe',
+      '<?xml version="1.0" encoding="US-ASCII"?><svg/>',
+    ),
+    safe(
+      'xml_declaration_without_encoding_safe',
+      '<?xml version="1.0"?><svg/>',
+    ),
+    safe(
+      'xml_stylesheet_pi_is_not_declaration_safe',
+      '<?xml-stylesheet href="#s"?><svg/>',
+    ),
+    safe('whitespace_only_payload_safe', ' \n\t'),
+    _S(
+      'bom_whitespace_then_svg_safe',
+      _concat([
+        _b64([0xEF, 0xBB, 0xBF]),
+        _utf8('\r\n\t <svg></svg>'),
+      ]),
+      enc,
+    ),
+    safe(
+      'valid_non_ascii_utf8_safe',
+      '<svg><text>çğış \u{FFFD} 😀</text></svg>',
+    ),
+    safe('xhref_not_matched', '<svg><g xhref="https://x.example/"/></svg>'),
+    safe('custom_ns_href_fragment_safe', '<svg><image x:href="#a"/></svg>'),
+    safe(
+      'prefixed_svg_elements_safe',
+      '<svg:svg xmlns:svg="http://www.w3.org/2000/svg"><svg:rect/></svg:svg>',
+    ),
+    safe(
+      'css_url_fragment_forms_safe',
+      '<svg><rect fill="url(#g)" style="fill:url( \'#g\' )"/></svg>',
+    ),
+    safe(
+      'css_url_data_safe',
+      '<svg><rect style="fill:url(data:image/png;base64,AA==)"/></svg>',
+    ),
+    safe('event_handler_accepted_risk', '<svg onload="alert(1)"><rect/></svg>'),
+    safe(
+      'real_href_after_fragment_safe',
+      '<svg><g title="a"/><use href="#a"/><use href="#b"/></svg>',
     ),
     unsafe('script_tag', '<svg><script>alert(1)</script></svg>'),
     unsafe('script_tag_uppercase', '<svg><SCRIPT>alert(1)</SCRIPT></svg>'),
@@ -971,6 +1083,124 @@ List<J> _svg() {
     unsafe(
       'href_after_newline',
       '<svg><use\nhref="https://x.example/"/></svg>',
+    ),
+    unsafe(
+      'prefixed_ns_href_https',
+      '<svg><g ns1:href="https://x.example/"/></svg>',
+    ),
+    unsafe(
+      'custom_ns_alias_href_https',
+      '<svg xmlns:x="http://www.w3.org/1999/xlink"><image x:href="http://evil.example/"/></svg>',
+    ),
+    unsafe(
+      'href_slash_separator',
+      '<svg><a/href="http://evil.example/">x</a></svg>',
+    ),
+    unsafe(
+      'href_quote_separator',
+      '<svg><a title="a"href="http://evil.example/">x</a></svg>',
+    ),
+    unsafe(
+      'href_bypass_fake_in_comment',
+      '<svg><!-- <a href="#x --><image href="http://evil"/></svg>',
+    ),
+    unsafe(
+      'href_bypass_fake_in_text',
+      '<svg><desc> href="#</desc><image href="http://evil"/></svg>',
+    ),
+    unsafe(
+      'href_bypass_fake_in_attribute',
+      '<svg><g title=\' href="#x\'/><image href="http://evil"/></svg>',
+    ),
+    unsafe(
+      'href_bypass_fake_unquoted',
+      '<svg><g a=href=#x b=1/><image href="http://evil"/></svg>',
+    ),
+    unsafe('href_unterminated_quote', '<svg><use href="#a'),
+    unsafe(
+      'utf7_doctype_entity_payload',
+      '+ADw-!DOCTYPE svg [+ADw-!ENTITY x "y"+AD4-]+AD4-+ADw-svg/+AD4-',
+      enc,
+    ),
+    unsafe(
+      'utf7_declared_href_payload',
+      '<?xml version="1.0" encoding="UTF-7"?>+ADw-svg+AD4-+ADw-image href+AD0-+ACI-http://evil+ACI-/+AD4-',
+      enc,
+    ),
+    unsafe(
+      'utf7_script_no_declaration',
+      '+ADw-svg+AD4-+ADw-script+AD4-alert(1)+ADw-/script+AD4-',
+      enc,
+    ),
+    unsafeBytes(
+      'ebcdic_payload',
+      _b64([0x4C, 0xA2, 0xA5, 0x87, 0x6E, 0x4C, 0x61, 0xA2, 0xA5, 0x87, 0x6E]),
+      enc,
+    ),
+    unsafe(
+      'declared_utf16_on_ascii_bytes',
+      '<?xml version="1.0" encoding="UTF-16"?><svg/>',
+      enc,
+    ),
+    unsafe(
+      'declared_iso_8859_1',
+      '<?xml version="1.0" encoding="ISO-8859-1"?><svg/>',
+      enc,
+    ),
+    unsafe(
+      'declared_encoding_unquoted',
+      '<?xml version="1.0" encoding=utf-7?><svg/>',
+      enc,
+    ),
+    unsafe(
+      'declared_unterminated_declaration',
+      '<?xml version="1.0" encoding="utf-8"',
+      enc,
+    ),
+    unsafe(
+      'declared_fake_utf8_then_utf7',
+      '<?xml version="encoding=\'utf-8\'" encoding="utf-7"?><svg/>',
+      enc,
+    ),
+    unsafe('leading_garbage_before_tag', 'x<svg/>', enc),
+    unsafe('leading_text_before_tag', 'abc <svg></svg>', enc),
+    unsafeBytes(
+      'ff_byte_before_href',
+      _concat([
+        _utf8('<svg><use '),
+        _b64([0xFF]),
+        _utf8('href="http://e"/></svg>'),
+      ]),
+      enc,
+    ),
+    unsafe(
+      'prefixed_script_tag',
+      '<svg:svg xmlns:svg="http://www.w3.org/2000/svg"><svg:script>alert(1)</svg:script></svg:svg>',
+    ),
+    unsafe(
+      'prefixed_foreign_object_mixed_case',
+      '<svg><x:ForeignObject><div>x</div></x:ForeignObject></svg>',
+    ),
+    unsafe(
+      'css_import_rule',
+      "<svg><style>@import 'https://evil.example/x.css';</style></svg>",
+    ),
+    unsafe(
+      'css_url_http_attribute',
+      '<svg><rect fill="url(http://evil.example/g)"/></svg>',
+    ),
+    unsafe(
+      'css_url_quoted_style',
+      '<svg><rect style="background:url(\'http://evil.example/\')"/></svg>',
+    ),
+    unsafe(
+      'css_url_double_quoted_spaced',
+      '<svg><rect style=\'fill:URL( "http://evil.example/" )\'/></svg>',
+    ),
+    unsafe('css_url_empty', '<svg><rect fill="url()"/></svg>'),
+    unsafe(
+      'css_url_second_occurrence_external',
+      '<svg><rect fill="url(#a)" stroke="url(http://evil.example/)"/></svg>',
     ),
   ];
   final out = <J>[];

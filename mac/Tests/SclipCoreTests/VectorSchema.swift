@@ -21,15 +21,24 @@ struct GenSpec: Codable, Equatable, Sendable {
 
     /// `size` baytı üretir. Aynı (size, seed) her zaman aynı baytları verir.
     func bytes() -> Data {
-        var data = Data(count: max(size, 0))
         let base = seed &* 31
-        data.withUnsafeMutableBytes { raw in
-            guard let p = raw.bindMemory(to: UInt8.self).baseAddress else { return }
-            for i in 0..<raw.count {
-                p[i] = UInt8(truncatingIfNeeded: base &+ i)
-            }
+        // Periyot 256: tek periyot üretilip katlanarak çoğaltılır (debug derlemede 25 MiB'ı bayt bayt
+        // yazmak vaka başına saniyeler sürüyordu). Çıktı bayt bayt üretimle aynıdır.
+        let period = Data((0..<min(max(size, 0), 256)).map { UInt8(truncatingIfNeeded: base &+ $0) })
+        return Data.tiled(period, toCount: max(size, 0))
+    }
+}
+
+extension Data {
+    /// `unit`'i art arda ekleyerek tam `count` bayt üretir (son kopya kesilebilir); katlamayla O(log n) ekleme.
+    static func tiled(_ unit: Data, toCount count: Int) -> Data {
+        guard count > 0, !unit.isEmpty else { return Data() }
+        var out = Data(capacity: count)
+        out.append(unit.prefix(count))
+        while out.count < count {
+            out.append(out.prefix(Swift.min(out.count, count - out.count)))
         }
-        return data
+        return out
     }
 }
 
@@ -71,9 +80,7 @@ indirect enum ByteInput: Equatable, Sendable {
             return out
         case .repeated(let unit, let count):
             let one = Data(unit.utf8)
-            var out = Data(capacity: one.count * max(count, 0))
-            for _ in 0..<max(count, 0) { out.append(one) }
-            return out
+            return Data.tiled(one, toCount: one.count * max(count, 0))
         }
     }
 
