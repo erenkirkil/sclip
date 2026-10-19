@@ -385,7 +385,8 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
 - **B-8.4.3** Temizlik: öğe düşünce (eviction, silme, temizleme) o öğenin dizini; kapanışta ve açılışta tüm `sclip/`
   dizini. OS panosunun hâlâ referans ettiği öğenin (son yazılan imza) dosyası silinmez.
 - **B-8.4.4** `isSensitive` öğe hiçbir koşulda materialize edilmez; imageSet "hepsini yapıştır" bu durumda satır içi
-  çoklu öğe olarak yazılır (E29).
+  çoklu öğe olarak yazılır (E29). Hassas işaretli dosya kopyasında dosya promise'ı çözülmez; yalnız var olan dosya
+  URL'leri alınır, yoksa kopya atlanır.
 - **B-8.4.5** Ekran kilidi temizliği temp dosyalarına ve OS panosuna dokunmaz.
 
 ## 8.5 Ayar sınırı
@@ -431,7 +432,7 @@ Bu belge iki native uygulamanın (`mac/`, `win/`) **tek bağlayıcı davranış 
   `OpenClipboard(hwnd)` 5 × ~12 ms yeniden denenir; kilit okuma bitince hemen bırakılır.
 - **B-8.8.3** Panel gösterilmeden önce senkron sayaç kontrolü yapılır, değiştiyse okunur (E6).
 - **B-8.8.4** Tick sırası: kilit kenarı (yalnız açık → kilitli) → sayaç aynıysa çık → hassas ve filtre açıksa çık
-  (sayaç tüketilir) → dosya varsa dosya yolu (boş dönerse sayaç geri sarılır, sonraki tick yeniden dener) → değilse oku
+  (sayaç tüketilir) → dosya varsa dosya yolu (boş dönerse sayaç geri sarılır, ilk denemeden itibaren en fazla 10 sn yeniden denenir) → değilse oku
   + sınıflandır → imza dedup → yayınla.
 - **B-8.8.5** Uygulama açılışındaki ilk tick temel çizgidir, yayınlanmaz.
 - **B-8.8.6** Her okuma yolu (dosya promise'ı dahil) 10 sn zaman aşımlıdır; izleme hiçbir okumada bloklanmaz (E27).
