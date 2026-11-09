@@ -139,4 +139,213 @@ final class PasteboardReaderTests: XCTestCase {
         XCTAssertEqual(reader.readFiles(destination: id), [expectedURL])
         XCTAssertEqual(receivedIDs, [id])
     }
+
+    func testFilePromiseReaderPollsWithoutBlockingAndResolvesOnSubsequentTick() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sclip-promise-test-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        var pendingCallback: (@Sendable (URL?, Error?) -> Void)?
+        var targetEntryDir: URL?
+        let currentDate = Date(timeIntervalSince1970: 1_000)
+
+        let promiseReader = FilePromiseReader(
+            root: tempRoot,
+            timeout: 10,
+            now: { currentDate },
+            startOperations: { _, entryDir, _, onFile in
+                targetEntryDir = entryDir
+                pendingCallback = onFile
+                return 1
+            }
+        )
+
+        let entryID = EntryID(raw: 77)
+        // First tick starts async operation and returns empty immediately (non-blocking).
+        let firstTick = promiseReader.receive(from: pasteboard, into: entryID)
+        XCTAssertTrue(firstTick.isEmpty)
+        let dir = try XCTUnwrap(targetEntryDir)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path))
+
+        // Background promise finishes before second tick.
+        let resolvedFile = dir.appendingPathComponent("photo.jpg")
+        pendingCallback?(resolvedFile, nil)
+
+        // Second tick returns resolved URL without starting a second operation.
+        let secondTick = promiseReader.receive(from: pasteboard, into: entryID)
+        XCTAssertEqual(secondTick, [resolvedFile])
+    }
+
+    func testFilePromiseReaderTimeoutCleansUpTempDir() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sclip-promise-timeout-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        var currentDate = Date(timeIntervalSince1970: 2_000)
+        var createdDir: URL?
+
+        let promiseReader = FilePromiseReader(
+            root: tempRoot,
+            timeout: 10,
+            now: { currentDate },
+            startOperations: { _, entryDir, _, _ in
+                createdDir = entryDir
+                return 1
+            }
+        )
+
+        let entryID = EntryID(raw: 88)
+        XCTAssertTrue(promiseReader.receive(from: pasteboard, into: entryID).isEmpty)
+        let dir = try XCTUnwrap(createdDir)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path))
+
+        // Advance clock past 10s timeout -> next poll cancels and removes orphan temp directory.
+        currentDate = currentDate.addingTimeInterval(10.5)
+        XCTAssertTrue(promiseReader.receive(from: pasteboard, into: entryID).isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path))
+    }
+
+    func testJpegWithTiffDoesNotOverwriteWithPng() throws {
+        let reader = PasteboardReader(pasteboard: pasteboard) { _, _ in [] }
+        let image = NSImage(size: NSSize(width: 4, height: 4))
+        image.lockFocus()
+        NSColor.systemBlue.setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 4, height: 4)).fill()
+        image.unlockFocus()
+        let tiffData = try XCTUnwrap(image.tiffRepresentation)
+        let jpegMagic = Data([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10])
+
+        let jpegType = NSPasteboard.PasteboardType("public.jpeg")
+        pasteboard.declareTypes([jpegType, .tiff], owner: nil)
+        XCTAssertTrue(pasteboard.setData(jpegMagic, forType: jpegType))
+        XCTAssertTrue(pasteboard.setData(tiffData, forType: .tiff))
+
+        let clip = reader.readClip()
+        XCTAssertEqual(clip.items.count, 1)
+        XCTAssertEqual(clip.items.first?.formats[.jpeg], jpegMagic)
+        XCTAssertNil(clip.items.first?.formats[.png])
+    }
+
+    func testFilePromiseReaderAutoTimeoutWithoutSecondPollCleansUpTempDir() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sclip-promise-autotimeout-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        var createdDir: URL?
+        var lateCallback: (@Sendable (URL?, Error?) -> Void)?
+
+        let promiseReader = FilePromiseReader(
+            root: tempRoot,
+            timeout: 0.05,
+            startOperations: { _, entryDir, _, onFile in
+                createdDir = entryDir
+                lateCallback = onFile
+                return 1
+            }
+        )
+
+        let entryID = EntryID(raw: 91)
+        XCTAssertTrue(promiseReader.receive(from: pasteboard, into: entryID).isEmpty)
+        let dir = try XCTUnwrap(createdDir)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path))
+
+        let exp = expectation(description: "auto timeout cleanup without polling")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path))
+
+        // Even if a late callback writes to the cancelled directory, it is immediately removed.
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let lateFile = dir.appendingPathComponent("late.jpg")
+        try Data("late".utf8).write(to: lateFile)
+        lateCallback?(lateFile, nil)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path))
+    }
+
+    func testFilePromiseReaderWaitsForAllPromisedFilesFromMultiFileReceiver() throws {
+        XCTAssertEqual(FilePromiseReader.expectedFileCount(forFileNameCounts: [1, 3, 0]), 5)
+
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sclip-promise-multifile-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        var pendingCallback: (@Sendable (URL?, Error?) -> Void)?
+        let promiseReader = FilePromiseReader(
+            root: tempRoot,
+            timeout: 10,
+            startOperations: { _, _, _, onFile in
+                pendingCallback = onFile
+                return FilePromiseReader.expectedFileCount(forFileNameCounts: [2])
+            }
+        )
+
+        let entryID = EntryID(raw: 92)
+        XCTAssertTrue(promiseReader.receive(from: pasteboard, into: entryID).isEmpty)
+
+        let file1 = tempRoot.appendingPathComponent("a.png")
+        let file2 = tempRoot.appendingPathComponent("b.png")
+        pendingCallback?(file1, nil)
+        // Only 1 of 2 promised files completed -> still pending.
+        XCTAssertTrue(promiseReader.receive(from: pasteboard, into: entryID).isEmpty)
+
+        pendingCallback?(file2, nil)
+        // Both files completed -> returns full list.
+        XCTAssertEqual(promiseReader.receive(from: pasteboard, into: entryID), [file1, file2])
+    }
+
+    func testReadClipCancelsPendingFilePromiseAttempt() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sclip-promise-supersede-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        var createdDir: URL?
+        let promiseReader = FilePromiseReader(
+            root: tempRoot,
+            timeout: 10,
+            startOperations: { _, entryDir, _, _ in
+                createdDir = entryDir
+                return 1
+            }
+        )
+        let reader = PasteboardReader(
+            pasteboard: pasteboard,
+            receivePromises: { pb, id in promiseReader.receive(from: pb, into: id) },
+            cancelPromises: { promiseReader.cancelCurrentAttempt() }
+        )
+
+        let promisedType = NSPasteboard.PasteboardType("com.apple.pasteboard.promised-file-url")
+        pasteboard.declareTypes([promisedType], owner: nil)
+        pasteboard.setData(Data("1".utf8), forType: promisedType)
+
+        XCTAssertTrue(reader.readFiles(destination: EntryID(raw: 93)).isEmpty)
+        let dir = try XCTUnwrap(createdDir)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path))
+
+        // User copies plain text while promise is still in-flight -> readClip cancels orphan attempt.
+        pasteboard.clearContents()
+        pasteboard.setString("plain copy", forType: .string)
+        _ = reader.readClip()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path))
+    }
+
+    func testRtfWithEmptyPlainAndTiffProvidesPngForClassifierFallback() throws {
+        let reader = PasteboardReader(pasteboard: pasteboard) { _, _ in [] }
+        let image = NSImage(size: NSSize(width: 4, height: 4))
+        image.lockFocus()
+        NSColor.systemGreen.setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 4, height: 4)).fill()
+        image.unlockFocus()
+        let tiffData = try XCTUnwrap(image.tiffRepresentation)
+
+        pasteboard.declareTypes([.string, .rtf, .tiff], owner: nil)
+        XCTAssertTrue(pasteboard.setString("", forType: .string))
+        XCTAssertTrue(pasteboard.setData(Data("{\\rtf1}".utf8), forType: .rtf))
+        XCTAssertTrue(pasteboard.setData(tiffData, forType: .tiff))
+
+        let clip = reader.readClip()
+        XCTAssertNotNil(clip.items.first?.formats[.png])
+    }
 }

@@ -24,17 +24,25 @@ fi
 
 if [[ "$CONFIG" == "release" ]]; then
   ENTITLEMENTS="$PKG/Resources/sclip.entitlements"
+  swift build -c release --arch arm64 --arch x86_64 --package-path "$PKG"
+  BIN_DIR="$(swift build -c release --arch arm64 --arch x86_64 --package-path "$PKG" --show-bin-path)"
 else
   ENTITLEMENTS="$PKG/Resources/sclip-debug.entitlements"
+  swift build -c "$CONFIG" --package-path "$PKG"
+  BIN_DIR="$(swift build -c "$CONFIG" --package-path "$PKG" --show-bin-path)"
 fi
-
-swift build -c "$CONFIG" --package-path "$PKG"
-BIN_DIR="$(swift build -c "$CONFIG" --package-path "$PKG" --show-bin-path)"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BIN_DIR/sclip" "$APP/Contents/MacOS/sclip"
+if [[ "$CONFIG" == "release" ]]; then
+  ARCHS="$(lipo -archs "$APP/Contents/MacOS/sclip")"
+  if [[ "$ARCHS" != *"arm64"* || "$ARCHS" != *"x86_64"* ]]; then
+    echo "HATA: release ikilisi universal (arm64 + x86_64) değil: $ARCHS" >&2
+    exit 1
+  fi
+fi
 cp "$PKG/Resources/Info.plist" "$APP/Contents/Info.plist"
 cp "$PKG/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cp "$STRINGS" "$APP/Contents/Resources/strings.tr.json"

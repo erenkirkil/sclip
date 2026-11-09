@@ -91,7 +91,8 @@ public final class AppContainer: RefreshPort {
         let pr = promiseReader!
         pasteboardReader = PasteboardReader(
             pasteboard: .general,
-            receivePromises: { pb, id in pr.receive(from: pb, into: id) }
+            receivePromises: { pb, id in pr.receive(from: pb, into: id) },
+            cancelPromises: { pr.cancelCurrentAttempt() }
         )
 
         captureEngine = CaptureEngine(
@@ -114,7 +115,12 @@ public final class AppContainer: RefreshPort {
         let ts = tempStore!
         historyStore = HistoryStore(
             maxItems: settingsViewModel.maxItems,
-            onEvict: { entry in ts.delete(entry) }
+            onEvict: { entry in
+                ts.delete(entry)
+                MainActor.assumeIsolated {
+                    ThumbnailCache.shared.remove(entryID: entry.id)
+                }
+            }
         )
 
         pasteboardWriter = PasteboardWriter(pasteboard: .general, temp: tempStore)
@@ -125,7 +131,13 @@ public final class AppContainer: RefreshPort {
             search: searchViewModel,
             strings: strings,
             clock: clock,
-            resetBaseline: { ce.resetBaseline() }
+            resetBaseline: {
+                pr.cancelCurrentAttempt()
+                ce.resetBaseline()
+                MainActor.assumeIsolated {
+                    ThumbnailCache.shared.clear()
+                }
+            }
         )
 
         // Initial baseline tick (B-8.8.5) and clearOnStartup (B-8.8.11)

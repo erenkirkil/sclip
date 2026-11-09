@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import CoreGraphics
 import Foundation
 import SclipCore
@@ -17,7 +18,7 @@ public struct SystemCGEventPoster: CGEventPoster {
 
 @MainActor
 public final class CGEventPaster: PastePort {
-    private static let vKeyCode: CGKeyCode = 0x09
+    public static let ansiVKeyCode: CGKeyCode = 0x09
 
     private let delayAfterOrderOut: TimeInterval
     private let enterReleaseTimeout: TimeInterval
@@ -26,6 +27,7 @@ public final class CGEventPaster: PastePort {
     private let isTrusted: () -> Bool
     private let keyState: KeyState
     private let poster: CGEventPoster
+    private let vKeyCodeProvider: () -> CGKeyCode
 
     private var capturedTargetPID: pid_t?
 
@@ -36,7 +38,8 @@ public final class CGEventPaster: PastePort {
         frontmostPID: @escaping () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier },
         isTrusted: @escaping () -> Bool = { AccessibilityPermission.isTrusted() },
         keyState: KeyState = SystemKeyState(),
-        poster: CGEventPoster = SystemCGEventPoster()
+        poster: CGEventPoster = SystemCGEventPoster(),
+        vKeyCodeProvider: @escaping () -> CGKeyCode = { CGEventPaster.resolveVKeyCode() }
     ) {
         self.delayAfterOrderOut = delayAfterOrderOut
         self.enterReleaseTimeout = enterReleaseTimeout
@@ -45,6 +48,7 @@ public final class CGEventPaster: PastePort {
         self.isTrusted = isTrusted
         self.keyState = keyState
         self.poster = poster
+        self.vKeyCodeProvider = vKeyCodeProvider
     }
 
     public func captureTarget() {
@@ -68,6 +72,46 @@ public final class CGEventPaster: PastePort {
             }
             self.schedulePasteAfterDelay(targetPID: targetPID, completion: completion)
         }
+    }
+
+    /// Aktif klavye duzeninde 'v' harfini ureten sanal tus kodunu bulur (Turkce-F, Dvorak vb. destegi).
+    /// Latin disi bir duzen aktifse ANSI V (0x09) varsayilanina doner.
+    public static func resolveVKeyCode() -> CGKeyCode {
+        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+              let rawPtr = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData)
+        else {
+            return ansiVKeyCode
+        }
+        let layoutData = unsafeBitCast(rawPtr, to: CFData.self)
+        guard let bytePtr = CFDataGetBytePtr(layoutData) else {
+            return ansiVKeyCode
+        }
+        let keyboardLayout = UnsafeRawPointer(bytePtr).assumingMemoryBound(to: UCKeyboardLayout.self)
+        let kbdType = UInt32(LMGetKbdType())
+
+        for code in UInt16(0)..<UInt16(128) {
+            var deadKeyState: UInt32 = 0
+            var chars = [UniChar](repeating: 0, count: 4)
+            var actualLength: Int = 0
+            let status = UCKeyTranslate(
+                keyboardLayout,
+                code,
+                UInt16(kUCKeyActionDisplay),
+                0,
+                kbdType,
+                OptionBits(kUCKeyTranslateNoDeadKeysBit),
+                &deadKeyState,
+                chars.count,
+                &actualLength,
+                &chars
+            )
+            if status == noErr, actualLength == 1 {
+                if chars[0] == 0x0076 || chars[0] == 0x0056 { // 'v' or 'V'
+                    return CGKeyCode(code)
+                }
+            }
+        }
+        return ansiVKeyCode
     }
 
     private func waitUntilReturnReleased(start: Date, onDone: @escaping @MainActor @Sendable () -> Void) {
@@ -101,9 +145,10 @@ public final class CGEventPaster: PastePort {
                 completion(.aborted)
                 return
             }
+            let keyCode = self.vKeyCodeProvider()
             guard let source = CGEventSource(stateID: .hidSystemState),
-                  let keyDown = CGEvent(keyboardEventSource: source, virtualKey: Self.vKeyCode, keyDown: true),
-                  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: Self.vKeyCode, keyDown: false)
+                  let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+                  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
             else {
                 completion(.aborted)
                 return

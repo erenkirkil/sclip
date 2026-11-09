@@ -15,7 +15,7 @@ let package = Package(
         ),
         .testTarget(name: "SclipCoreTests", dependencies: ["SclipCore"]),
         .testTarget(name: "SclipViewModelsTests", dependencies: ["SclipViewModels"]),
-        .testTarget(name: "SclipPlatformTests", dependencies: ["SclipPlatform"]),
+        .testTarget(name: "SclipPlatformTests", dependencies: ["SclipPlatform", "SclipUI"]),
     ],
     swiftLanguageModes: [.v6]
 )

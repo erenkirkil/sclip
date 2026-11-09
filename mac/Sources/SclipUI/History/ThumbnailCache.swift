@@ -7,6 +7,9 @@ public final class ThumbnailCache {
     public static let shared = ThumbnailCache()
 
     private let cache = NSCache<NSString, NSImage>()
+    private var keysByEntryID: [EntryID: Set<String>] = [:]
+    private var clearGeneration: UInt64 = 0
+    private var entryGenerations: [EntryID: UInt64] = [:]
 
     public init(countLimit: Int = 256) {
         cache.countLimit = countLimit
@@ -30,11 +33,17 @@ public final class ThumbnailCache {
             return
         }
 
+        let capturedClearGen = clearGeneration
+        let capturedEntryGen = entryGenerations[entryID, default: 0]
         let maxPixelSize = max(24, Int(ceil(Metrics.thumb * max(scale, 1.0) * 2.0)))
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let cgImage = Self.decodeCGThumbnail(from: data, maxPixelSize: maxPixelSize)
             DispatchQueue.main.async {
-                guard let cgImage else {
+                guard let self,
+                      self.clearGeneration == capturedClearGen,
+                      self.entryGenerations[entryID, default: 0] == capturedEntryGen,
+                      let cgImage
+                else {
                     completion(nil)
                     return
                 }
@@ -42,7 +51,7 @@ public final class ThumbnailCache {
                     cgImage: cgImage,
                     size: NSSize(width: Metrics.thumb, height: Metrics.thumb)
                 )
-                self?.cache.setObject(nsImage, forKey: keyString as NSString)
+                self.storeImage(nsImage, entryID: entryID, keyString: keyString)
                 completion(nsImage)
             }
         }
@@ -54,8 +63,8 @@ public final class ThumbnailCache {
         scale: CGFloat,
         completion: @escaping @MainActor (NSImage?) -> Void
     ) {
-        let key = cacheKey(entryID: entryID, index: 0, scale: scale) as NSString
-        if let hit = cache.object(forKey: key) {
+        let keyString = cacheKey(entryID: entryID, index: 0, scale: scale)
+        if let hit = cache.object(forKey: keyString as NSString) {
             completion(hit)
             return
         }
@@ -71,12 +80,28 @@ public final class ThumbnailCache {
             return
         }
 
-        cache.setObject(image, forKey: key)
+        storeImage(image, entryID: entryID, keyString: keyString)
         completion(image)
     }
 
+    public func remove(entryID: EntryID) {
+        entryGenerations[entryID, default: 0] &+= 1
+        guard let keys = keysByEntryID.removeValue(forKey: entryID) else { return }
+        for key in keys {
+            cache.removeObject(forKey: key as NSString)
+        }
+    }
+
     public func clear() {
+        clearGeneration &+= 1
+        entryGenerations.removeAll()
+        keysByEntryID.removeAll()
         cache.removeAllObjects()
+    }
+
+    private func storeImage(_ image: NSImage, entryID: EntryID, keyString: String) {
+        keysByEntryID[entryID, default: []].insert(keyString)
+        cache.setObject(image, forKey: keyString as NSString)
     }
 
     private func cacheKey(entryID: EntryID, index: Int, scale: CGFloat) -> String {

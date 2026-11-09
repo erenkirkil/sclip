@@ -156,4 +156,27 @@ final class CGEventPasterTests: XCTestCase {
         XCTAssertFalse(poster.events[1].isKeyDown)
         XCTAssertEqual(poster.events[1].flags, .maskCommand)
     }
+
+    func testCustomVKeyCodeProviderIsUsedForNonAnsiLayouts() {
+        let poster = FakeCGEventPoster()
+        // Turkish-F / Dvorak 'v' virtual key code (0x2F)
+        let paster = CGEventPaster(
+            delayAfterOrderOut: 0.001,
+            enterReleaseTimeout: 0.1,
+            frontmostPID: { 99 },
+            isTrusted: { true },
+            keyState: FakeKeyState(),
+            poster: poster,
+            vKeyCodeProvider: { 0x2F }
+        )
+
+        paster.captureTarget()
+        let exp = expectation(description: "Posts layout-specific Cmd+V")
+        paster.pasteToTarget { _ in exp.fulfill() }
+        wait(for: [exp], timeout: 1.0)
+
+        XCTAssertEqual(poster.events.count, 2)
+        XCTAssertEqual(poster.events[0].keyCode, 0x2F)
+        XCTAssertEqual(poster.events[1].keyCode, 0x2F)
+    }
 }
