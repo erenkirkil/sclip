@@ -39,7 +39,15 @@ cp "$PKG/Resources/Info.plist" "$APP/Contents/Info.plist"
 cp "$PKG/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cp "$STRINGS" "$APP/Contents/Resources/strings.tr.json"
 
-codesign --force --sign - --entitlements "$ENTITLEMENTS" "$APP"
+SIGN_IDENTITY="${SCLIP_CODESIGN_IDENTITY:-}"
+if [[ -z "$SIGN_IDENTITY" ]]; then
+  SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Developer ID Application:/ { print $2; exit }')"
+fi
+if [[ -z "$SIGN_IDENTITY" ]]; then
+  SIGN_IDENTITY="-"
+fi
+
+codesign --force --sign "$SIGN_IDENTITY" --entitlements "$ENTITLEMENTS" "$APP"
 codesign --verify --strict "$APP"
 
 echo "Hazır: $APP ($CONFIG)"

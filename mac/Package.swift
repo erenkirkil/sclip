@@ -8,7 +8,7 @@ let package = Package(
         .target(name: "SclipCore"),
         .target(name: "SclipViewModels", dependencies: ["SclipCore"]),
         .target(name: "SclipPlatform", dependencies: ["SclipCore"]),
-        .target(name: "SclipUI", dependencies: ["SclipViewModels"]),
+        .target(name: "SclipUI", dependencies: ["SclipCore", "SclipViewModels", "SclipPlatform"]),
         .executableTarget(
             name: "sclip",
             dependencies: ["SclipCore", "SclipViewModels", "SclipPlatform", "SclipUI"]
