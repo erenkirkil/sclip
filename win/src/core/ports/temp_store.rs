@@ -3,11 +3,19 @@ use std::fmt;
 use crate::core::model::Entry;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TempStoreError(pub String);
+pub enum TempStoreError {
+    SensitiveEntry,
+    UnsupportedPayload,
+    Io(String),
+}
 
 impl fmt::Display for TempStoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        match self {
+            Self::SensitiveEntry => f.write_str("sensitive entry cannot be materialized"),
+            Self::UnsupportedPayload => f.write_str("unsupported payload for temp store"),
+            Self::Io(msg) => f.write_str(msg),
+        }
     }
 }
 

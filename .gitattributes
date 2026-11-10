@@ -1,5 +1,10 @@
-# Git for Windows (core.autocrlf=true) CRLF yapıp bash betiklerini bozmasın.
+# Git for Windows (core.autocrlf=true) CRLF yapıp bash betiklerini ve kaynak dosyaları bozmasın.
+*       text=auto eol=lf
 *.sh    text eol=lf
 *.ps1   text eol=crlf
 *.icns  binary
+*.ico   binary
 *.png   binary
+*.jpg   binary
+*.gif   binary
+*.webp  binary
