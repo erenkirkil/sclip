@@ -51,11 +51,15 @@ new_clean_root() {
   local r="$TMP/$1"
   mkdir -p "$r/mac/Sources/SclipCore" "$r/mac/Sources/SclipViewModels" \
            "$r/mac/Sources/SclipUI" "$r/mac/Tests/SclipCoreTests" \
-           "$r/mac/Resources" "$r/win/core" "$r/win/tests" "$r/scripts"
+           "$r/mac/Resources" "$r/win/core" "$r/win/src/core" \
+           "$r/win/src/viewmodels" "$r/win/tests" "$r/scripts"
   printf 'import Foundation\nimport CryptoKit\n' > "$r/mac/Sources/SclipCore/Ok.swift"
   printf 'import Foundation\nimport Combine\nimport SclipCore\n' > "$r/mac/Sources/SclipViewModels/Ok.swift"
   printf 'import SwiftUI\nimport AppKit\nlet s = "Quit"\n' > "$r/mac/Sources/SclipUI/Ok.swift"
   printf '#pragma once\n#include <string>\n' > "$r/win/core/ok.h"
+  printf '#![forbid(unsafe_code)]\npub const V: &str = "2.0.0";\n' > "$r/win/src/core/mod.rs"
+  printf '#![forbid(unsafe_code)]\npub const V: &str = "2.0.0";\n' > "$r/win/src/viewmodels/mod.rs"
+  printf '[package]\nname = "sclip"\nversion = "2.0.0"\nedition = "2021"\n[dependencies]\n' > "$r/win/Cargo.toml"
   printf '<plist><dict>\n<key>com.apple.security.app-sandbox</key>\n</dict></plist>\n' > "$r/mac/Resources/sclip.entitlements"
   cp "$r/mac/Resources/sclip.entitlements" "$r/mac/Resources/sclip-debug.entitlements"
   printf '#!/usr/bin/env bash\n# --options runtime burada yorum\ncodesign --force --options runtime x\n' > "$r/scripts/make-dmg.sh"
@@ -150,6 +154,24 @@ expect_ok   "NetworkMonitor tip adi ve import Foundation yakalanmaz" "$R"
 
 R="$(new_clean_root no_dmg)"; rm "$R/scripts/make-dmg.sh"
 expect_ok   "make-dmg.sh yoksa kural 6 atlanır" "$R"
+
+R="$(new_clean_root winrs401)"; gen_lines "$R/win/src/core/edge.rs" 401
+expect_fail "win 401 satırlık rs" "$R" "rule1-lines"
+
+R="$(new_clean_root wintestrs601)"; gen_lines "$R/win/tests/edge.rs" 601
+expect_fail "win 601 satırlık rs test" "$R" "rule1-lines"
+
+R="$(new_clean_root wincore_unsafe)"
+printf 'pub fn f() { unsafe { } }\n' > "$R/win/src/core/bad.rs"
+expect_fail "win/src/core unsafe" "$R" "rule3-win-core"
+
+R="$(new_clean_root wincore_net)"
+printf 'use std::net::TcpStream;\n' > "$R/win/src/core/net.rs"
+expect_fail "win/src/core std::net" "$R" "rule4-network"
+
+R="$(new_clean_root wincargo_dep)"
+printf '[package]\nname = "sclip"\nversion = "2.0.0"\nedition = "2021"\n[dependencies]\nserde = "1.0"\n' > "$R/win/Cargo.toml"
+expect_fail "win/Cargo.toml harici crate" "$R" "rule3-win-core"
 
 echo
 echo "sonuç: $PASS geçti, $FAILS kaldı"

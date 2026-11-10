@@ -37,7 +37,7 @@ jobs:
         run: bash scripts/verify.sh
 
   windows:
-    name: Windows (C++)
+    name: Windows (Rust)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

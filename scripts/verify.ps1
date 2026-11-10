@@ -1,10 +1,15 @@
-# sclip yerel kalite kapisi (Windows): cmake derleme + ctest + check-limits.sh (Git Bash).
+# sclip yerel kalite kapisi (Windows): check-limits.sh + oz test + cargo build/test --release.
 # Kullanim: powershell -ExecutionPolicy Bypass -File scripts\verify.ps1
 # PowerShell 5.1 ve 7 uyumlu. macOS icin: scripts/verify.sh
 $ErrorActionPreference = 'Stop'
 
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
+
+$CargoBin = Join-Path $env:USERPROFILE '.cargo\bin'
+if ((Test-Path -LiteralPath $CargoBin) -and ($env:PATH -notlike "*$CargoBin*")) {
+    $env:PATH = "$CargoBin;$env:PATH"
+}
 
 # Native komutlar $ErrorActionPreference'a takilmaz; cikis kodu elle kontrol edilir.
 function Invoke-Step {
@@ -35,12 +40,12 @@ function Resolve-GitBash {
 Write-Host "=== sclip verify (Windows) ==="
 Write-Host ""
 
-Invoke-Step 'cmake configure'  { cmake -S win -B win/build }
-Invoke-Step 'cmake build'      { cmake --build win/build --config Release }
-Invoke-Step 'ctest'            { ctest --test-dir win/build -C Release --output-on-failure }
 $Bash = Resolve-GitBash
 Write-Host "bash: $Bash"
-Invoke-Step 'check-limits'     { & $Bash scripts/check-limits.sh }
+Invoke-Step 'check-limits'           { & $Bash scripts/check-limits.sh }
+Invoke-Step 'check-limits self-test' { & $Bash scripts/tests/check-limits-selftest.sh }
+Invoke-Step 'cargo build --release'  { cargo build --manifest-path win/Cargo.toml --release }
+Invoke-Step 'cargo test --release'   { cargo test --manifest-path win/Cargo.toml --release }
 
 Write-Host "================================"
 Write-Host "PASS"

@@ -40,7 +40,7 @@ find_files() {
   # Kalıplar sabit, boşluksuz glob'lar; tırnaksız genişleme bilerek yapılır.
   set -f
   # shellcheck disable=SC2086
-  find "$dir" \( -name .build -o -name .swiftpm -o -path "$ROOT/win/build" \) -prune \
+  find "$dir" \( -name .build -o -name .swiftpm -o -name target -o -path "$ROOT/win/build" \) -prune \
        -o -type f \( $expr \) -print
   set +f
 }
@@ -72,7 +72,7 @@ EOF
       *) check_line_limit "$f" 400 ;;
     esac
   done <<EOF
-$(find_files "$ROOT/win" '*.h' '*.cpp')
+$(find_files "$ROOT/win" '*.rs' '*.h' '*.cpp')
 EOF
 }
 
@@ -111,9 +111,9 @@ rule2() {
   check_imports "$ROOT/mac/Sources/SclipViewModels" "Foundation Combine SclipCore"
 }
 
-# --- Kural 3: win/core Windows başlığı içermez ----------------------------------
+# --- Kural 3: win/core Windows başlığı / unsafe / harici crate içermez ---------
 rule3() {
-  local f hit
+  local f hit out
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     while IFS= read -r hit; do
@@ -125,14 +125,51 @@ EOF
   done <<EOF
 $(find_files "$ROOT/win/core" '*')
 EOF
+
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    while IFS= read -r hit; do
+      [ -n "$hit" ] || continue
+      fail "rule3-win-core" "$(rel "$f"):${hit%%:*}" "unsafe yasak: ${hit#*:}"
+    done <<EOF
+$(grep -nE '(^|[^A-Za-z0-9_])unsafe([^A-Za-z0-9_]|$)' "$f" | grep -vE 'forbid\(unsafe_code\)')
+EOF
+    while IFS= read -r hit; do
+      [ -n "$hit" ] || continue
+      fail "rule3-win-core" "$(rel "$f"):${hit%%:*}" "Win32/platform bağımlılığı yasak: ${hit#*:}"
+    done <<EOF
+$(grep -nE 'crate::(platform|ui)|extern[[:space:]]+"(system|stdcall|C)"|windows_sys|winapi' "$f")
+EOF
+  done <<EOF
+$(find_files "$ROOT/win/src/core" '*.rs')
+$(find_files "$ROOT/win/src/viewmodels" '*.rs')
+EOF
+
+  if [ -f "$ROOT/win/Cargo.toml" ]; then
+    out="$(awk '
+      /^[[:space:]]*\[/ {
+        in_dep = ($0 ~ /^[[:space:]]*\[(dev-|build-)?dependencies(\.[^]]+)?\]/)
+        next
+      }
+      in_dep && $0 !~ /^[[:space:]]*(#|$)/ {
+        print FNR ":" $0
+      }
+    ' "$ROOT/win/Cargo.toml")"
+    while IFS= read -r hit; do
+      [ -n "$hit" ] || continue
+      fail "rule3-win-core" "win/Cargo.toml:${hit%%:*}" "harici crate bağımlılığı yasak: ${hit#*:}"
+    done <<EOF
+$out
+EOF
+  fi
 }
 
-# --- Kural 4: ağ yasağı (kaynak + CMake link listeleri) -------------------------
+# --- Kural 4: ağ yasağı (kaynak + CMake / Cargo listeleri) ---------------------
 rule4() {
   local f hit
   # "import Network" kalıpları import-aware: "import class Network.X", çift boşluk dahil;
   # NetworkMonitor gibi tip adları ve "import Foundation" yakalanmaz.
-  local pat='URLSession|NSURLConnection|import[[:space:]]+([a-z]+[[:space:]]+)?Network([^A-Za-z0-9_]|$)|linkedFramework\([[:space:]]*"Network"|CFNetwork|WKWebView|winhttp|wininet|ws2_32|WSAStartup'
+  local pat='URLSession|NSURLConnection|import[[:space:]]+([a-z]+[[:space:]]+)?Network([^A-Za-z0-9_]|$)|linkedFramework\([[:space:]]*"Network"|CFNetwork|WKWebView|winhttp|wininet|ws2_32|WSAStartup|std::net|TcpStream|UdpSocket'
   local d
   for d in mac win; do
     while IFS= read -r f; do
@@ -144,7 +181,7 @@ rule4() {
 $(grep -inE "$pat" "$f")
 EOF
     done <<EOF
-$(find_files "$ROOT/$d" '*.swift' '*.h' '*.hpp' '*.cpp' '*.c' '*.m' '*.mm' 'CMakeLists.txt' '*.cmake')
+$(find_files "$ROOT/$d" '*.swift' '*.rs' 'Cargo.toml' '*.h' '*.hpp' '*.cpp' '*.c' '*.m' '*.mm' 'CMakeLists.txt' '*.cmake')
 EOF
   done
 }
@@ -189,6 +226,7 @@ $(grep -nE "$pat" "$f" | grep -v '// log-tr-ok')
 EOF
   done <<EOF
 $(find_files "$ROOT/mac/Sources" '*.swift')
+$(find_files "$ROOT/win/src" '*.rs')
 EOF
 }
 

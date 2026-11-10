@@ -1,0 +1,15 @@
+[package]
+name = "sclip"
+version = "2.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "sclip"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sclip"
+path = "src/main.rs"
+
+[dependencies]
